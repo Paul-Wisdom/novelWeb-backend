@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Relation } from "typeorm";
+import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Relation } from "typeorm";
 import { Book } from "./book.entity";
 import { User } from "./user.entity";
 
@@ -13,18 +13,15 @@ export class Comment{
     @Column({default: false})
     edited: boolean
 
-    @Column({nullable: false})
-    @ManyToOne(() => Book, book => book.comments)
+    @ManyToOne(() => Book, book => book.comments, {nullable: false})
     book: Relation<Book>
 
-    @Column({nullable: false})
-    @ManyToOne(() => User, user => user.comments)
+    @ManyToOne(() => User, user => user.comments, {nullable: false})
     user: Relation<User>
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     dateModified: Date
 
-    @Column({default: []})
     @OneToMany(() => Reply, reply => reply.comment)
     replies: Relation<Reply[]>
 }
@@ -34,17 +31,15 @@ export class Reply{
     @PrimaryGeneratedColumn('uuid')
     replyId: string
 
-    @Column({nullable: false})
-    @ManyToOne(() => Comment, comment => comment.replies)
+    @ManyToOne(() => Comment, comment => comment.replies, {nullable: false})
     comment: Relation<Comment>
 
-    @Column({nullable: false})
-    @ManyToOne(() => User, user => user.replies)
+    @ManyToOne(() => User, user => user.replies, {nullable: false})
     user: Relation<User> 
 
     @Column({nullable: false})
     content: string
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     date: Date
 }

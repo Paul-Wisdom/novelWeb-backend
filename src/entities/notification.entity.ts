@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn, Relation } from "typeorm";
+import { Column, Entity, ManyToOne, PrimaryGeneratedColumn, Relation, CreateDateColumn } from "typeorm";
 import { User } from "./user.entity";
 import { Author } from "./author.entity";
 import { NotificationStatus } from "../utils/types";
@@ -16,20 +16,18 @@ class Notification{
     @Column({default: NotificationStatus.UNREAD})
     status: NotificationStatus
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     date: Date
 }
 
 @Entity('userNotification')
 export class UserNotification extends Notification{
-    @Column()
     @ManyToOne(() => User, user => user.notifications)
     user: Relation<User>
 }
 
 @Entity('authorNotification')
 export class AuthorNotification extends Notification{
-    @Column()
     @ManyToOne(() => Author, author => author.notifications)
     author: Relation<Author>
 }

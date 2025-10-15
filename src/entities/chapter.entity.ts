@@ -1,5 +1,7 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn, Relation } from "typeorm";
+import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Relation } from "typeorm";
 import { Book } from "./book.entity";
+import { OneToOne } from "typeorm/browser";
+import { LibraryBook } from "./libraryBook.entity";
 
 @Entity('chapter')
 export class Chapter{
@@ -18,10 +20,21 @@ export class Chapter{
     @Column({nullable: false})
     content: string
     
-    @Column({nullable: false})
-    @ManyToOne(() => Book, book => book.chapters)
+    @ManyToOne(() => Book, book => book.chapters, {nullable: false})
     book: Relation<Book>
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     updatedAt: Date
+}
+
+@Entity('paidChapter')
+export class PaidChapter{
+    @PrimaryGeneratedColumn('uuid')
+    id: string
+
+    @Column({nullable: false})
+    chapterId: string;
+
+    @ManyToOne(() => LibraryBook, libraryBook => libraryBook.paidChapters)
+    libraryBook: Relation<LibraryBook>
 }

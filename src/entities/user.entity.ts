@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, Relation, OneToOne } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, Relation, OneToOne, CreateDateColumn, JoinColumn } from "typeorm";
 import { Review } from "./review.entity";
 import { Comment, Reply } from "./comment.entity";
 import { Library } from "./library.entity";
@@ -18,26 +18,22 @@ export class User{
     @Column({nullable: false})
     password: string
 
-    @Column({default: []})
     @OneToMany(() => Review, review => review.user)
     reviews: Relation<Review[]>
 
-    @Column({default: []})
     @OneToMany(() => Comment, comment => comment.user)
     comments: Relation<Comment[]>
 
-    @Column({default: []})
     @OneToMany(() => Reply, reply => reply.user)
     replies: Relation<Reply[]>
 
-    @Column({nullable: false})
-    @OneToOne(() => Library, library => library.user)
+    @OneToOne(() => Library, library => library.user, {nullable: false, cascade: true})
+    @JoinColumn()
     library: Relation<Library>
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     joined: Date
 
-    @Column({default: []})
     @OneToMany(() => UserNotification, (userNotfification) => userNotfification.user)
     notifications: Relation<UserNotification[]>
 

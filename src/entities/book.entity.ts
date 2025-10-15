@@ -1,4 +1,4 @@
-import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, Relation } from "typeorm";
+import { Column, CreateDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn, Relation } from "typeorm";
 import { Author } from "./author.entity";
 import { Chapter } from "./chapter.entity";
 import { Review } from "./review.entity";
@@ -16,34 +16,55 @@ export class Book{
     @Column({nullable: false})
     summary: string
 
-    @Column({default: []})
-    tags: string[]
+    @ManyToMany(() => Tag, tag => tag.books)
+    @JoinTable()
+    tags: Relation<Tag[]>
 
-    @Column({nullable: false})
-    @ManyToOne(() => Author, (author) => author.books)
+    @ManyToOne(() => Author, (author) => author.books, {nullable: false})
     author: Relation <Author>
 
-    @Column({nullable: false, default: []})
     @OneToMany(() => Chapter, chapter => chapter.book)
     chapters: Relation<Chapter[]>
 
-    @Column({nullable: false, default: []})
     @OneToMany(() => Review, review => review.book)
     reviews: Relation<Review[]>
 
-    @Column({nullable: false, default: []})
     @OneToMany(() => Comment, comment => comment.book)
     comments: Relation<Comment[]>
 
-    @Column({default: []})
-    authorNotes: {
-        note: string,
-        date: number
-    }[]
+    @OneToMany(() => AuthorNote, authorNote => authorNote.book)
+    authorNotes: Relation<AuthorNote[]>
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     createdAt: Date
 
     @Column({default: BookStatus.ONGOING})
     status: BookStatus
+}
+
+@Entity('authorNote')
+export class AuthorNote{
+    @PrimaryGeneratedColumn('uuid')
+    authorNoteId: string
+
+    @Column({nullable: false})
+    note: string
+
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
+    date: Date
+
+    @ManyToOne(() => Book, book => book.authorNotes)
+    book: Relation<Book>
+}
+
+@Entity('tag')
+export class Tag{
+    @PrimaryGeneratedColumn('uuid')
+    tagId: string
+
+    @Column({nullable: false})
+    name: string
+
+    @ManyToMany(() => Book, book => book.tags)
+    books: Relation<Book[]>
 }

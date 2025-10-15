@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn, Relation } from "typeorm";
+import { Column, CreateDateColumn, Entity, JoinColumn, OneToMany, PrimaryGeneratedColumn, Relation } from "typeorm";
 import { Book } from "./book.entity";
 import { AuthorNotification } from "./notification.entity";
 
@@ -16,14 +16,12 @@ export class Author{
     @Column({nullable: false})
     password: string
 
-    @Column({nullable: false, default: []})
     @OneToMany(() => Book, (book) => book.author)
     books: Relation<Book[]>
 
-    @Column({default: Date.now()})
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     joined: Date
 
-    @Column({default: []})
     @OneToMany(() => AuthorNotification, (authorNotfification) => authorNotfification.author)
     notifications: Relation<AuthorNotification[]>
 }

@@ -3,7 +3,7 @@ export const typeDefs = `#graphql
         bookId: ID!
         name: String!
         summary: String!
-        tags: [String]!
+        tags: [Tag]!
         author: Author!
         chapters: [Chapter!]!
         reviews: [Review!]!
@@ -13,12 +13,18 @@ export const typeDefs = `#graphql
         status: String!
     }
 
+    type Tag {
+        tagId: ID!
+        name: String!
+        books: [Book!]!
+    }
+
     type Author {
         authorId: ID!
         username: String!
         books: [Book!]!
         joined: String!
-        notifications: [UserNotification!]!
+        notifications: [AuthorNotification!]!
         
     }
     type AuthorNote {
@@ -50,7 +56,7 @@ export const typeDefs = `#graphql
         username: String!
         library: Library!
         joined: String!
-        notifications: [AuthorNotification!]!
+        notifications: [UserNotification!]!
     }
 
     type Review {
@@ -85,7 +91,7 @@ export const typeDefs = `#graphql
         date: String!
     }
 
-    type UserNotfification {
+    type UserNotification {
         notificationId: ID!
         content: String!
         title: String!
@@ -93,7 +99,7 @@ export const typeDefs = `#graphql
         user: User!
     }
 
-    type AuthorNotfification {
+    type AuthorNotification {
         notificationId: ID!
         content: String!
         date: String!
@@ -101,17 +107,25 @@ export const typeDefs = `#graphql
         author: Author!
     }
 
+    type Admin {
+        adminId: ID!
+        username: String!
+        email: String!
+    }
+    union CombinedUser = Author | User | Admin
+
     type Query {
-        me: Author | User
+        me: CombinedUser!
         authors: [Author!]!
         author (username: String!): Author
         books (name: String): [Book!]!
-        findBooksByTags (tag: String!): [Book!]!
+        tags: [Tag!]!
+        findBooksByTags (tagIds: [String!]!): [Book!]!
         book (bookId: ID, name: String, authorName: String): Book
         user (username: String, id: ID): User
         chapter (chapterId: String!, bookId: String!): Chapter!
         chapterForLoggedInUsers (chapterId: String!, bookId: String!): Chapter!
-        library (): Library
+        library: Library
         review (bookId: String!): Review
         authorNotification (notificationId: String!): AuthorNotification
         userNotification (notificationId: String!): UserNotification
@@ -120,24 +134,28 @@ export const typeDefs = `#graphql
 
     type Mutation {
         login (loginInput: LoginInput!): Token
+        adminLogin (loginInput: LoginInput!): Token
         createAuthor (createUserInput: CreateUserInput!): Author
         createUser (createUserInput: CreateUserInput!): User
+        createAdmin (email: String!, username: String!): Admin!
         createBook (createBookInput: CreateBookInput!): Book
+        createTag (tagName: String!): Tag
         addChapter (addChapterInput: AddChapterInput): Book
         deleteChapter (chapterId: String!): String!
         addBookToLibrary (bookId: String!): LibraryBook
         deleteBookFromLibrary (libraryBookId: String): Library
-        updateLibraryBookPaidChapters (libraryBookId: String!, newPaidChapters: [Int]!): LibraryBook
+        updateLibraryBookPaidChapters (libraryBookId: String!, newPaidChapterId: String!): LibraryBook
         addReview (reviewInput: ReviewInput!): Review
         editReview (reviewId: String!, reviewInput: ReviewInput!): Review
         deleteReview (reviewId: String!): Review
         addComment (commentInput: CommentInput!): Comment
         editComment (commentId: String!, content: String! ): Comment
-        deleteComment (commentId: String!): Strings
+        deleteComment (commentId: String!): String
         addReply (commentId: String!, content: String!): Reply!
         deleteReply (replyId: String!): String!
-        addAuthorNote(content: String!, bookId: String!)
-
+        addAuthorNote(content: String!, bookId: String!): Book!
+        deleteAdmin (adminId: String!): String!
+        changeAdminPassword(adminId: String!, oldPassword: String!, newPassword: String!): Admin!
     }
 
     input CreateUserInput {
@@ -152,7 +170,7 @@ export const typeDefs = `#graphql
     input CreateBookInput {
         name: String!
         summary: String!
-        tags: [String!]!
+        tagIds: [String!]!
     }
     input AddChapterInput {
         number: Int!

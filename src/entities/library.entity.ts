@@ -7,11 +7,9 @@ export class Library{
     @PrimaryGeneratedColumn('uuid')
     libraryId: string;
 
-    @Column({nullable: false})
-    @OneToOne(() => User, user => user.library)
+    @OneToOne(() => User, user => user.library, {nullable: false})
     user: Relation<User>
 
-    @Column({default: []})
     @OneToMany(() => LibraryBook, (libraryBook) => libraryBook.library)
     libraryBooks: Relation<LibraryBook[]>
 }

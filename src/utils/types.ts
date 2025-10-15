@@ -1,8 +1,10 @@
-import { Author, User } from "../entities"
+import { Admin, Author, User } from "../entities"
 
 export enum Role {
-    User,
-    Author
+    USER,
+    AUTHOR,
+    ADMIN,
+    SUPERADMIN
 }
 
 export enum BookStatus {
@@ -25,4 +27,6 @@ export type JWTPayload = {
 export type Context = {
     user?: User
     author?: Author
+    admin?: Admin
+    superAdmin?: Admin
 }

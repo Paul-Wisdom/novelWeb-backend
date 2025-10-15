@@ -10,11 +10,9 @@ export class Review{
     @Column({nullable: false})
     rating: number
 
-    @Column({nullable: false})
-    @ManyToOne(() => Book, book => book.reviews)
+    @ManyToOne(() => Book, book => book.reviews, {nullable: false})
     book: Relation<Book>
 
-    @Column({nullable: false})
-    @ManyToOne(() => User, user => user.reviews)
+    @ManyToOne(() => User, user => user.reviews, {nullable: false})
     user: Relation<User>
 }
