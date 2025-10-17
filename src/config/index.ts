@@ -11,3 +11,6 @@ export const JWT_SECRET = process.env.JWT_SECRET as string
 export const PASSWORD_HASH_SALT = process.env.PASSWORD_HASH_SALT as string
 export const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL
 export const SUPERADMIN_PASSWORD = process.env.SUPERADMIN_PASSWORD
+export const CLOUDINARY_SECRET = process.env.CLOUDINARY_SECRET
+export const CLOUD_KEY = process.env.CLOUD_KEY
+export const CLOUD_NAME = process.env.CLOUD_NAME

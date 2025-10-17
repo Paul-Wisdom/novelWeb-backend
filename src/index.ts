@@ -1,10 +1,13 @@
-import { startStandaloneServer } from "@apollo/server/standalone";
+import { expressMiddleware } from '@as-integrations/express4';
 import { env, JWT_SECRET } from "./config";
 import { AppDataSource } from "./db/dataSource";
 import { ApolloServer } from "@apollo/server";
 import { typeDefs } from "./graphQL/typedefs";
 import { resolvers } from "./graphQL/resolvers";
+import GraphQLUpload from 'graphql-upload/GraphQLUpload.mjs'
+import {graphqlUploadExpress} from 'graphql-upload-ts'
 import * as jwt from 'jsonwebtoken'
+import express from 'express'
 import { Context, JWTPayload, Role } from "./utils/types";
 import { Admin, Author, User } from "./entities";
 import { errorHandler, superAdminCreator } from "./utils";
@@ -16,15 +19,20 @@ const adminRepository = AppDataSource.getRepository(Admin)
 AppDataSource.initialize().then((res) => {
     console.log(env)
     return superAdminCreator()
-}).then(() => {
+}).then(async () => {
     const server = new ApolloServer({
         typeDefs,
-        resolvers
+        resolvers,
+        csrfPrevention: env === 'dev'? false : true
     })
-    return startStandaloneServer(server, {
-        listen: {
-            port: 3003
-        },
+    await server.start()
+    const app = express()
+    app.use(graphqlUploadExpress({
+        maxFiles: 1,
+        maxFileSize: 10_000_000
+    }))
+
+    app.use('/graphql', express.json(), expressMiddleware(server, {
         context: async ({ req }): Promise<Context> => {
             let returnObj: Context = {}
             const auth = req.headers.authorization
@@ -41,8 +49,8 @@ AppDataSource.initialize().then((res) => {
                         const author = await authorRepository.findOne({ where: { authorId: decodedToken.id } })
                         if (author) returnObj.author = author
                     }
-                    else{
-                        const admin = await adminRepository.findOne({where: {adminId: decodedToken.id}})
+                    else {
+                        const admin = await adminRepository.findOne({ where: { adminId: decodedToken.id } })
                         if (admin && admin.username === 'super') returnObj.superAdmin = admin
                         else if (admin) returnObj.admin = admin
                     }
@@ -53,10 +61,11 @@ AppDataSource.initialize().then((res) => {
             }
             return returnObj
         }
-        // context req parameter type as well as context type for resolvers
+    }))
+
+    app.listen(3003, () => {
+        console.log(`Server ready at port 3003`)
     })
-}).then(({ url }) => {
-    console.log(`Server ready at ${url}`)
 }).catch((e) => {
     console.log(e)
 })

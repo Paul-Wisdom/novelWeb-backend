@@ -11,3 +11,12 @@ AppDataSource.initialize().then(async () => {
     const lib = await AppDataSource.getRepository(User).find({relations: ['library']})
     console.log(lib)
 })
+
+const date = 'flying snail'
+console.log(date);
+
+const date2 =  'wanderer tales';
+console.log(date2);
+
+const p = date.split(' ').join('_')+ '_' + date2.split(' ').join('_')
+console.log(p)

@@ -1,4 +1,11 @@
 export const typeDefs = `#graphql
+
+    scalar Upload
+
+    type File {
+        url: String!,
+        publicId: String!
+    }
     type Book {
         bookId: ID!
         name: String!
@@ -11,6 +18,7 @@ export const typeDefs = `#graphql
         authorNotes: [AuthorNote!]!
         createdAt: String!
         status: String!
+        photoUrl: String
     }
 
     type Tag {
@@ -24,6 +32,7 @@ export const typeDefs = `#graphql
         username: String!
         books: [Book!]!
         joined: String!
+        profilePhotoUrl: String
         notifications: [AuthorNotification!]!
         
     }
@@ -56,6 +65,7 @@ export const typeDefs = `#graphql
         username: String!
         library: Library!
         joined: String!
+        profilePhotoUrl: String
         notifications: [UserNotification!]!
     }
 
@@ -156,6 +166,8 @@ export const typeDefs = `#graphql
         addAuthorNote(content: String!, bookId: String!): Book!
         deleteAdmin (adminId: String!): String!
         changeAdminPassword(adminId: String!, oldPassword: String!, newPassword: String!): Admin!
+        uploadUserProfileImage(file: Upload!): File!
+        uploadBookImage(file: Upload!, bookId: String!): File!
     }
 
     input CreateUserInput {

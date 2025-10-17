@@ -12,6 +12,9 @@ export class User{
     @Column({unique: true, nullable: false})
     username: string;
 
+    @Column({nullable: true})
+    profilePhotoUrl: string
+
     @Column({nullable: false})
     email: string;
 

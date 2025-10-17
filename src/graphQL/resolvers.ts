@@ -7,6 +7,9 @@ import { compare, hash } from "bcryptjs"
 import { PASSWORD_HASH_SALT } from "../config"
 import { AuthorNotification, UserNotification } from "../entities/notification.entity"
 import { Mail } from "../entities/mail.entity"
+import {GraphQLUpload, FileUpload } from "graphql-upload-ts"
+import { create } from "domain"
+import { imageUploadStream } from "../services/fileService"
 
 const authorRepository = AppDataSource.getRepository(Author)
 const bookRepository = AppDataSource.getRepository(Book)
@@ -34,14 +37,15 @@ export const resolvers = {
             return null
         }
     },
+    Upload: GraphQLUpload,
     Query: {
         me: (_: null, args: null, context: Context) => {
             console.log(context)
             if (context.author) return context.author
             else if (context.user) return context.user
-            else if (context.admin || context.superAdmin) return context.admin? context.admin: context.superAdmin
+            else if (context.admin || context.superAdmin) return context.admin ? context.admin : context.superAdmin
             else {
-                throw errorHandler('Unauthorized','UNAUTHORIZED')
+                throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
 
         },
@@ -56,7 +60,7 @@ export const resolvers = {
             if (args.name) {
                 return await bookRepository.find({ where: { name: args.name } })
             }
-            const books = await bookRepository.find({relations: ['author', 'tags']})
+            const books = await bookRepository.find({ relations: ['author', 'tags'] })
             console.log(books)
             return books
         },
@@ -175,7 +179,7 @@ export const resolvers = {
             const email = args.loginInput.email
             const password = args.loginInput.password
 
-            if (!email || !password) throw errorHandler('Email or Password not provided','BAD_USER_INPUT',args.loginInput)
+            if (!email || !password) throw errorHandler('Email or Password not provided', 'BAD_USER_INPUT', args.loginInput)
             const user = await userRepository.findOne({ where: { email: email } })
             if (user) {
                 token = await verifyLogin({ password: user.password, id: user.userId, role: Role.USER, username: user.username }, args.loginInput) as string
@@ -201,7 +205,7 @@ export const resolvers = {
             if (admin) {
                 const adminRole = admin.username === 'super' ? Role.SUPERADMIN : Role.ADMIN
                 token = await verifyLogin({ password: admin.password, id: admin.adminId, role: adminRole, username: admin.username }, args.loginInput) as string
-                return { value: token}
+                return { value: token }
             }
 
             throw errorHandler('Invalid Email or password', 'BAD_USER_INPUT', args.loginInput)
@@ -216,11 +220,11 @@ export const resolvers = {
             const username = args.username
 
             if (!email || !username || username.length < 3) throw errorHandler('Missing Info or Minimum length requirement failed', 'BAD_USER_INPUT', args)
-            const sameEmail = await adminRepository.findOne({where: {email: email}})
-            if(sameEmail) throw errorHandler('Email already in use', 'BAD_USER_INPUT')
+            const sameEmail = await adminRepository.findOne({ where: { email: email } })
+            if (sameEmail) throw errorHandler('Email already in use', 'BAD_USER_INPUT')
 
-            const sameUsername = await adminRepository.findOne({where: {username: username}})
-            if(sameUsername) throw errorHandler('Username already in use', 'BAD_USER_INPUT')
+            const sameUsername = await adminRepository.findOne({ where: { username: username } })
+            if (sameUsername) throw errorHandler('Username already in use', 'BAD_USER_INPUT')
 
             const password = generatePassword();
             console.log(password)
@@ -230,7 +234,7 @@ export const resolvers = {
         },
         changeAdminPassword: async (_: null, args: { adminId: string, oldPassword: string, newPassword: string }, context: Context) => {
             if (!context.admin) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
-            else if (!args.adminId || !args.newPassword  || args.newPassword.length < 6|| !args.oldPassword) throw errorHandler('Missing Info', 'BAD_USER_INPUT', args)
+            else if (!args.adminId || !args.newPassword || args.newPassword.length < 6 || !args.oldPassword) throw errorHandler('Missing Info', 'BAD_USER_INPUT', args)
 
             const admin = await adminRepository.findOne({ where: { adminId: args.adminId } });
             if (!admin) throw errorHandler('Admin Not Found', 'NOT_FOUND')
@@ -258,12 +262,12 @@ export const resolvers = {
             }
         }) => {
             console.log(args)
-            if (!args.createUserInput.email || !args.createUserInput.password || args.createUserInput.password.length < 6 || args.createUserInput.username.length < 4 || !args.createUserInput.username) throw errorHandler('Missing Info','BAD_USER_INPUT')
+            if (!args.createUserInput.email || !args.createUserInput.password || args.createUserInput.password.length < 6 || args.createUserInput.username.length < 4 || !args.createUserInput.username) throw errorHandler('Missing Info', 'BAD_USER_INPUT')
 
             const userWithUsername = await userRepository.findOne({ where: { username: args.createUserInput.username } })
-            if (userWithUsername) throw errorHandler('Username not unique','BAD_USER_INPUT',args.createUserInput.username)
+            if (userWithUsername) throw errorHandler('Username not unique', 'BAD_USER_INPUT', args.createUserInput.username)
             const authorWithUsername = await authorRepository.findOne({ where: { username: args.createUserInput.username } })
-            if (authorWithUsername) throw errorHandler('Username not unique','BAD_USER_INPUT',args.createUserInput.username)
+            if (authorWithUsername) throw errorHandler('Username not unique', 'BAD_USER_INPUT', args.createUserInput.username)
 
             const mailExists = await mailRepository.findOne({ where: { mail: args.createUserInput.email } })
             if (mailExists) throw errorHandler('Mail already in use', 'BAD_USER_INPUT')
@@ -277,13 +281,13 @@ export const resolvers = {
             const username = args.createUserInput.username
             const email = args.createUserInput.email
             const password = args.createUserInput.password
-            if (!email || !password || username.length < 4 || password.length < 6|| !username) throw errorHandler('Missing Info','BAD_USER_INPUT',args)
-                
+            if (!email || !password || username.length < 4 || password.length < 6 || !username) throw errorHandler('Missing Info', 'BAD_USER_INPUT', args)
+
 
             const userWithUsername = await userRepository.findOne({ where: { username: username } })
-            if (userWithUsername) throw errorHandler('Username not unique','BAD_USER_INPUT',args.createUserInput.username)
+            if (userWithUsername) throw errorHandler('Username not unique', 'BAD_USER_INPUT', args.createUserInput.username)
             const authorWithUsername = await authorRepository.findOne({ where: { username: username } })
-            if (authorWithUsername) throw errorHandler('Username not unique','BAD_USER_INPUT',args.createUserInput.username)
+            if (authorWithUsername) throw errorHandler('Username not unique', 'BAD_USER_INPUT', args.createUserInput.username)
             const mailExists = await mailRepository.findOne({ where: { mail: args.createUserInput.email } })
             if (mailExists) throw errorHandler('Mail already in use', 'BAD_USER_INPUT')
             const library = new Library()
@@ -300,13 +304,15 @@ export const resolvers = {
             const summary = args.createBookInput.summary
             const tagIds = args.createBookInput.tagIds
             if (!context.author) {
-                throw errorHandler('Unauthorized','UNAUTHORIZED')
+                throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
+            const existingBookByAuthor = await bookRepository.findOne({ where: { name: name, author: context.author } })
+            if (existingBookByAuthor) throw errorHandler('Book with name already created by same author', 'BAD_USER_INPUT', name)
             const uniqueTagIds = Array.from(new Set(tagIds))
-            if (!name || name.length < 4 || !summary)throw  errorHandler('Book name must be atleast 4 characters long and must contain a summary', 'BAD_USER_INPUT')
+            if (!name || name.length < 4 || !summary) throw errorHandler('Book name must be atleast 4 characters long and must contain a summary', 'BAD_USER_INPUT')
             const tags = await Promise.all(uniqueTagIds.map(tagId => tagRepository.findOne({ where: { tagId: tagId } })))
             const cleanedTags = tags.filter(tag => tag !== null)
-            if(cleanedTags.length < 1) throw errorHandler('Books must have a minimum of 1 valid tag', 'BAD_USER_INPUT')
+            if (cleanedTags.length < 1) throw errorHandler('Books must have a minimum of 1 valid tag', 'BAD_USER_INPUT')
             const book = await bookRepository.save(bookRepository.create({ name: name, summary: summary, tags: cleanedTags, author: context.author }))
             console.log(book)
             return book
@@ -332,17 +338,17 @@ export const resolvers = {
             }
             const book = await bookRepository.findOne({ where: { bookId: bookId } })
             if (!book) {
-                throw errorHandler('Book with bookId provided not found','BAD_USER_INPUT')
+                throw errorHandler('Book with bookId provided not found', 'BAD_USER_INPUT')
             }
             if (book.author.authorId !== context.author.authorId) {
-                throw errorHandler('Unauthorized','UNAUTHORIZED')
+                throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
             const chapter = await chapterRepository.save(chapterRepository.create({ number: number, title: title, content: content, paywall: paywall, book: book }))
             return chapter
         },
         deleteChapter: async (_: null, args: { chapterId: string }, context: Context) => {
             if (!context.author) {
-                throw errorHandler('Unauthorized','UNAUTHORIZED')
+                throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
             const chapter = await chapterRepository.findOne({ where: { chapterId: args.chapterId } })
             if (!chapter) throw errorHandler('No chapter associated with chapterId', 'BAD_USER_INPUT')
@@ -401,9 +407,9 @@ export const resolvers = {
                 if (book && review) {
                     return reviewRepository.update({ reviewId: args.reviewId }, { rating: args.reviewInput.rating })
                 }
-               throw  errorHandler('Book or Review Not Found', 'NOT_FOUND')
+                throw errorHandler('Book or Review Not Found', 'NOT_FOUND')
             }
-           throw  errorHandler('Unauthorized', 'UNAUTHORIZED')
+            throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
         deleteReview: async (_: null, args: { reviewId: string }, context: Context) => {
             if (context.user) {
@@ -417,7 +423,7 @@ export const resolvers = {
                 if (book) return await commentRepository.save(commentRepository.create({ content: args.commentInput.content, user: context.user, book: book }))
                 throw errorHandler('Book Not Found', 'NOT_FOUND')
             }
-           throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
         editComment: async (_: null, args: { commentId: string, content: string }, context: Context) => {
             if (context.user) {
@@ -463,11 +469,50 @@ export const resolvers = {
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
-    },
+        uploadUserProfileImage: async (_: null, args: { file: Promise<FileUpload> }, context: Context) => {
+            if (!context.user && !context.author) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            const { createReadStream } = await args.file
+            const publicId = context.author ? 'author_' + context.author.authorId : 'user_' + context.user?.userId
+            try {
+                const uploadedFile = await imageUploadStream({ folder: 'user_uploads', publicId, createReadStream });
+                console.log(uploadedFile)
 
-    // User: {
-    //     library: (root: User) => {
-    //         const library = 
-    //     }
-    // }
+                if (context.user) {
+                    context.user.profilePhotoUrl = uploadedFile.url
+                    await userRepository.save(context.user)
+                }
+                else if (context.author) {
+                    context.author.profilePhotoUrl = uploadedFile.url
+                    await authorRepository.save(context.author)
+                }
+                return uploadedFile
+            } catch (e) {
+                console.log(e)
+                throw errorHandler('Error uploading image', 'INTERNAL_SERVER_ERROR')
+            }
+
+
+        },
+        uploadBookImage: async (_: null, args: { file: Promise<FileUpload>, bookId: string }, context: Context) => {
+            const book = await bookRepository.findOne({ where: { bookId: args.bookId }, relations: ['author'] })
+            console.log(book)
+            if (!book) throw errorHandler('Book not found', 'NOT_FOUND')
+            else if (!context.author || context.author.authorId !== book.author.authorId) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            else {
+                const { createReadStream } = await args.file
+                const publicId = 'book_' + book.bookId
+                try {
+                    const uploadedFile = await imageUploadStream({ folder: 'book_uploads', publicId, createReadStream });
+                    console.log(uploadedFile)
+                    book.photoUrl = uploadedFile.url
+                    await bookRepository.save(book)
+
+                    return  uploadedFile
+                } catch (e) {
+                    console.log(e)
+                    throw errorHandler('Error uploading image', 'INTERNAL_SERVER_ERROR')
+                }
+            }
+        },
+    }    
 }

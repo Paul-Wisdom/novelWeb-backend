@@ -16,6 +16,9 @@ export class Author{
     @Column({nullable: false})
     password: string
 
+    @Column({nullable: true})
+    profilePhotoUrl: string
+
     @OneToMany(() => Book, (book) => book.author)
     books: Relation<Book[]>
 

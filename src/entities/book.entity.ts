@@ -20,6 +20,9 @@ export class Book{
     @JoinTable()
     tags: Relation<Tag[]>
 
+    @Column({nullable: true})
+    photoUrl: string
+
     @ManyToOne(() => Author, (author) => author.books, {nullable: false})
     author: Relation <Author>
 
