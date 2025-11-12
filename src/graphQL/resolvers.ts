@@ -10,6 +10,8 @@ import { Mail } from "../entities/mail.entity"
 import {GraphQLUpload, FileUpload } from "graphql-upload-ts"
 import { create } from "domain"
 import { imageUploadStream } from "../services/fileService"
+import { addEmailToQueue } from "../services/queues/producers/emailProducer"
+import emailTemplates from "../services/mailService/templates"
 
 const authorRepository = AppDataSource.getRepository(Author)
 const bookRepository = AppDataSource.getRepository(Book)
@@ -230,6 +232,7 @@ export const resolvers = {
             console.log(password)
             const hashedPassword = await hash(password, 7)
             const admin = await adminRepository.save(adminRepository.create({ username: username, email: email, password: hashedPassword }))
+            await addEmailToQueue({to: admin.email, subject: 'WELCOME MAIL', content: emailTemplates.adminWelcomeEmailTemplate(admin.username, password)})
             return admin
         },
         changeAdminPassword: async (_: null, args: { adminId: string, oldPassword: string, newPassword: string }, context: Context) => {

@@ -20,3 +20,4 @@ console.log(date2);
 
 const p = date.split(' ').join('_')+ '_' + date2.split(' ').join('_')
 console.log(p)
+

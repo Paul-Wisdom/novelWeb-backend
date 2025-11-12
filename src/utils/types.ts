@@ -30,3 +30,9 @@ export type Context = {
     admin?: Admin
     superAdmin?: Admin
 }
+
+export type EmailQueueJobData = {
+to: string
+    content: string
+    subject: string
+}

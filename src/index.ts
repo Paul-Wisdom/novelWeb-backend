@@ -4,7 +4,6 @@ import { AppDataSource } from "./db/dataSource";
 import { ApolloServer } from "@apollo/server";
 import { typeDefs } from "./graphQL/typedefs";
 import { resolvers } from "./graphQL/resolvers";
-import GraphQLUpload from 'graphql-upload/GraphQLUpload.mjs'
 import {graphqlUploadExpress} from 'graphql-upload-ts'
 import * as jwt from 'jsonwebtoken'
 import express from 'express'
