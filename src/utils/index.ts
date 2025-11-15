@@ -5,6 +5,7 @@ import { JWTPayload, Role } from "./types";
 import { GraphQLError } from "graphql";
 import * as jwt from 'jsonwebtoken'
 import { AppDataSource } from "../db/dataSource";
+import { Mail } from "../entities/mail.entity";
 
 export const verifyLogin = async (user: { password: string, id: string, role: Role, username: string }, loginArgs: { email: string, password: string }) => {
     const match = await compare(loginArgs.password, user.password);
@@ -29,10 +30,12 @@ export const errorHandler = (message: string, code: string, invalidArgs?: {}) =>
 
 export const superAdminCreator = async () => {
     const adminRepository = AppDataSource.getRepository(Admin) 
+    const mailRepo = AppDataSource.getRepository(Mail)
     const superAdmin = await adminRepository.findOne({where: {username: 'super'}})
     if (!superAdmin){
         const hahsedPassword = await hash(SUPERADMIN_PASSWORD as string, 7)
         await adminRepository.save(adminRepository.create({username: 'super', email: SUPERADMIN_EMAIL, password: hahsedPassword}))
+        await mailRepo.save(mailRepo.create({mail: SUPERADMIN_EMAIL, verified: true, userRole: Role.ADMIN}))
     }
 }
 

@@ -182,6 +182,9 @@ export const resolvers = {
             const password = args.loginInput.password
 
             if (!email || !password) throw errorHandler('Email or Password not provided', 'BAD_USER_INPUT', args.loginInput)
+            
+            const verifiedMail = await mailRepository.findOne({where: {mail: email, verified: true}})
+            if(!verifiedMail) throw errorHandler('Email not verified', 'UNAUTHORIZED');
             const user = await userRepository.findOne({ where: { email: email } })
             if (user) {
                 token = await verifyLogin({ password: user.password, id: user.userId, role: Role.USER, username: user.username }, args.loginInput) as string
@@ -213,6 +216,68 @@ export const resolvers = {
             throw errorHandler('Invalid Email or password', 'BAD_USER_INPUT', args.loginInput)
 
         },
+        forgetPasswordRequest: async (_: null, args: {email: string, newPassword: string}) => {
+            const email = args.email
+            const newPassword = args.newPassword
+
+            if(!email || !newPassword) throw errorHandler('Email or password missing', 'BAD_USER_INPUT')
+            const mail = await mailRepository.findOne({where: {mail: email}})
+            if (!mail) throw errorHandler('Email not found', 'NOT_FOUND')
+            
+            mail.passwordChangeCode = generatePassword()
+            mail.passwordCodeExpiry = new Date (Date.now() + (30*60*1000))
+            mail.newPassword = await hash(newPassword, 7)
+            await mailRepository.save(mail)
+            await addEmailToQueue({to: mail.mail, subject: 'PASSWORD CHANGE REQUEST', content: emailTemplates.passwordChangeCodeTemplate(mail.mail, mail.passwordChangeCode)})
+            return {value:'mail sent'}
+        },
+        forgetPassword: async (_: null, args: {code: string, email: string}) => {
+            const code = args.code
+            const email = args.email
+
+            if(!email || !code) throw errorHandler('Email or OTP missing', 'BAD_USER_INPUT')
+
+            const mail = await mailRepository.findOne({where: {mail: email}});
+            if(!mail) throw errorHandler('Email does not exist', 'NOT_FOUND')
+            else if(new Date() > mail.passwordCodeExpiry) throw errorHandler('Password change code has expired', 'FORBIDDEN')
+            else if (code !== mail.passwordChangeCode) throw errorHandler('Wrong Verification Code', 'UNAUTHORIZED')
+
+            switch(mail.userRole){
+                case Role.USER:
+                    await userRepository.update({email: email}, {password: mail.newPassword})
+                case Role.AUTHOR:
+                    await authorRepository.update({email: email}, {password: mail.newPassword})
+                case Role.ADMIN:
+                    await adminRepository.update({email: email}, {password: mail.newPassword})
+            }
+            return {value:'password updated'}
+
+        },
+        verifyMail: async (_: null, args: {email: string, verificationCode: string}) => {
+            const email = args.email
+            const code = args.verificationCode
+
+            if(!email || !code) throw errorHandler('Email or OTP missing', 'BAD_USER_INPUT')
+
+            const mail = await mailRepository.findOne({where: {mail: email}});
+            if(!mail) throw errorHandler('Email does not exist', 'NOT_FOUND')
+            else if(new Date() > mail.verificationCodeExpiry) throw errorHandler('Verification code has expired', 'FORBIDDEN')
+            else if (code !== mail.verificationCode) throw errorHandler('Wrong Verification Code', 'UNAUTHORIZED')
+            
+            mail.verified = true
+            await mailRepository.save(mail);
+            return {value:'mail verified'}
+        },
+        resendVerificationCode: async (_: null, args: {email: string}) => {
+            const mail = await mailRepository.findOne({where: {mail: args.email, verified: false}})
+            if (!mail) throw errorHandler('Unverified email not found', 'NOT_FOUND')
+
+            mail.verificationCode = generatePassword()
+            mail.verificationCodeExpiry = new Date(Date.now() + (30*60*1000))
+            await mailRepository.save(mail)
+            await addEmailToQueue({to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION'})
+            return {value:'mail sent'}
+        },
         createAdmin: async (_: null, args: {
             username: string,
             email: string
@@ -222,7 +287,7 @@ export const resolvers = {
             const username = args.username
 
             if (!email || !username || username.length < 3) throw errorHandler('Missing Info or Minimum length requirement failed', 'BAD_USER_INPUT', args)
-            const sameEmail = await adminRepository.findOne({ where: { email: email } })
+            const sameEmail = await mailRepository.findOne({ where: { mail: email } })
             if (sameEmail) throw errorHandler('Email already in use', 'BAD_USER_INPUT')
 
             const sameUsername = await adminRepository.findOne({ where: { username: username } })
@@ -232,6 +297,7 @@ export const resolvers = {
             console.log(password)
             const hashedPassword = await hash(password, 7)
             const admin = await adminRepository.save(adminRepository.create({ username: username, email: email, password: hashedPassword }))
+            await mailRepository.save(mailRepository.create({mail: admin.email, verified: true, userRole: Role.ADMIN}))
             await addEmailToQueue({to: admin.email, subject: 'WELCOME MAIL', content: emailTemplates.adminWelcomeEmailTemplate(admin.username, password)})
             return admin
         },
@@ -253,7 +319,7 @@ export const resolvers = {
         deleteAdmin: async (_: null, args: { adminId: string }, context: Context) => {
             if (context.superAdmin) {
                 await adminRepository.delete({ adminId: args.adminId })
-                return 'Admin deleted'
+                return {value:'Admin deleted'}
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
@@ -276,7 +342,8 @@ export const resolvers = {
             if (mailExists) throw errorHandler('Mail already in use', 'BAD_USER_INPUT')
             const hashedPassword = await hash(args.createUserInput.password, 7)//PASSWORD_HASH_SALT);
             const author = await authorRepository.save(authorRepository.create({ username: args.createUserInput.username, email: args.createUserInput.email, password: hashedPassword, books: [] }))
-            await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email }))
+            const mail = await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email, verificationCode: generatePassword(), verificationCodeExpiry: new Date (Date.now() + (30*60*1000)) , userRole: Role.AUTHOR}))
+            await addEmailToQueue({to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION'})
             console.log(author)
             return author
         },
@@ -299,7 +366,8 @@ export const resolvers = {
             const hashedPassword = await hash(password, 7);
             const user = await userRepository.save(userRepository.create({ username: username, email: email, password: hashedPassword, library: library }))
             console.log(user)
-            await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email }))
+            const mail = await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email, verificationCode: generatePassword(), verificationCodeExpiry: new Date (Date.now() + (30*60*1000)), userRole: Role.USER }))
+            await addEmailToQueue({to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION'})
             return user
         },
         createBook: async (_: null, args: { createBookInput: { name: string, summary: string, tagIds: string[] } }, context: Context) => {
@@ -358,7 +426,7 @@ export const resolvers = {
             if (chapter?.book.author.authorId !== context.author.authorId) throw errorHandler('Unauthorized', 'UNAUTHORIZED');
 
             await chapterRepository.delete({ chapterId: args.chapterId })
-            return 'chapter deleted successfully'
+            return {value: 'chapter deleted successfully'}
         },
         addBookToLibrary: async (_: null, args: { bookId: string }, context: Context) => {
             if (!context.user) throw errorHandler('Unauthorized', 'UNAUTHORIZED');
@@ -455,6 +523,7 @@ export const resolvers = {
         deleteReply: async (_: null, args: { replyId: string }, context: Context) => {
             if (context.user) {
                 await replyRepository.delete({ replyId: args.replyId, user: context.user })
+                return {value: 'reply deleted'}
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },

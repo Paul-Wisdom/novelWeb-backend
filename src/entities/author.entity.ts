@@ -7,7 +7,7 @@ export class Author{
     @PrimaryGeneratedColumn('uuid')
     authorId: string;
 
-    @Column({unique: true, nullable: false})
+    @Column({nullable: false})
     username: string;
 
     @Column({nullable: false})

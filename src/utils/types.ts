@@ -32,7 +32,7 @@ export type Context = {
 }
 
 export type EmailQueueJobData = {
-to: string
+    to: string
     content: string
     subject: string
 }

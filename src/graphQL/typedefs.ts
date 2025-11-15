@@ -122,6 +122,9 @@ export const typeDefs = `#graphql
         username: String!
         email: String!
     }
+    type StringOutput {
+        value: String!
+    }
     union CombinedUser = Author | User | Admin
 
     type Query {
@@ -145,13 +148,17 @@ export const typeDefs = `#graphql
     type Mutation {
         login (loginInput: LoginInput!): Token
         adminLogin (loginInput: LoginInput!): Token
+        forgetPasswordRequest(email: String!, newPassword: String!): StringOutput!
+        forgetPassword(code: String!, email: String!): StringOutput!
+        verifyMail (email: String!, verificationCode: String!): StringOutput!
+        resendVerificationCode(email: String!): StringOutput!
         createAuthor (createUserInput: CreateUserInput!): Author
         createUser (createUserInput: CreateUserInput!): User
         createAdmin (email: String!, username: String!): Admin!
         createBook (createBookInput: CreateBookInput!): Book
         createTag (tagName: String!): Tag
         addChapter (addChapterInput: AddChapterInput): Book
-        deleteChapter (chapterId: String!): String!
+        deleteChapter (chapterId: String!): StringOutput!
         addBookToLibrary (bookId: String!): LibraryBook
         deleteBookFromLibrary (libraryBookId: String): Library
         updateLibraryBookPaidChapters (libraryBookId: String!, newPaidChapterId: String!): LibraryBook
@@ -162,9 +169,9 @@ export const typeDefs = `#graphql
         editComment (commentId: String!, content: String! ): Comment
         deleteComment (commentId: String!): String
         addReply (commentId: String!, content: String!): Reply!
-        deleteReply (replyId: String!): String!
+        deleteReply (replyId: String!): StringOutput!
         addAuthorNote(content: String!, bookId: String!): Book!
-        deleteAdmin (adminId: String!): String!
+        deleteAdmin (adminId: String!): StringOutput!
         changeAdminPassword(adminId: String!, oldPassword: String!, newPassword: String!): Admin!
         uploadUserProfileImage(file: Upload!): File!
         uploadBookImage(file: Upload!, bookId: String!): File!

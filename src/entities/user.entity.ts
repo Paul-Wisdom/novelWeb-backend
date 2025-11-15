@@ -9,7 +9,7 @@ export class User{
     @PrimaryGeneratedColumn('uuid')
     userId: string;
 
-    @Column({unique: true, nullable: false})
+    @Column({ nullable: false})
     username: string;
 
     @Column({nullable: true})

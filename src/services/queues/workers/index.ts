@@ -7,5 +7,5 @@ async function getPendingJobs() {
     console.log(jobs)
 }
 
-getPendingJobs()
+// getPendingJobs()
 export { emailWorker }
