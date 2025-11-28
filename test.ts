@@ -1,6 +1,8 @@
 // import { AppDataSource } from "./src/db/dataSource"
 // import { Library, User } from "./src/entities"
 
+import { randomBytes } from "crypto";
+
 // const test = async () => { 
 // await AppDataSource.query('CREATE SCHEMA public;')
 // await AppDataSource.query('GRANT ALL ON SCHEMA public TO postgres;')
@@ -21,5 +23,8 @@
 // const p = date.split(' ').join('_')+ '_' + date2.split(' ').join('_')
 // console.log(p)
 
-console.log(new Date())
-console.log(new Date(Date.now() + (30*60*1000)))
+// console.log(new Date())
+// console.log(new Date(Date.now() + (30*60*1000)))
+
+const code = randomBytes(2).toString('hex');
+console.log(code)

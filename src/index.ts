@@ -10,6 +10,7 @@ import express from 'express'
 import { Context, JWTPayload, Role } from "./utils/types";
 import { Admin, Author, User } from "./entities";
 import { errorHandler, superAdminCreator } from "./utils";
+import googleAuthRouter from './middlewares/google-auth';
 
 const userRepository = AppDataSource.getRepository(User)
 const authorRepository = AppDataSource.getRepository(Author)
@@ -26,18 +27,23 @@ AppDataSource.initialize().then((res) => {
     })
     await server.start()
     const app = express()
+
+    app.use(express.json())
+    app.use(express.urlencoded({ extended: true }))
+
+    app.use('/oauth',googleAuthRouter)
     app.use(graphqlUploadExpress({
         maxFiles: 1,
         maxFileSize: 10_000_000
     }))
 
-    app.use('/graphql', express.json(), expressMiddleware(server, {
+
+    app.use('/graphql', expressMiddleware(server, {
         context: async ({ req }): Promise<Context> => {
             let returnObj: Context = {}
             const auth = req.headers.authorization
             if (auth && auth.startsWith('Bearer ')) {
                 const token = auth.split(' ')[1]
-                console.log(token)
                 try {
                     const decodedToken: jwt.JwtPayload = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
                     if (decodedToken.role === Role.USER) {

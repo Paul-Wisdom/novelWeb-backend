@@ -13,7 +13,7 @@ export class Author{
     @Column({nullable: false})
     email: string;
 
-    @Column({nullable: false})
+    @Column({nullable: true})
     password: string
 
     @Column({nullable: true})

@@ -245,10 +245,13 @@ export const resolvers = {
             switch(mail.userRole){
                 case Role.USER:
                     await userRepository.update({email: email}, {password: mail.newPassword})
+                    break;
                 case Role.AUTHOR:
                     await authorRepository.update({email: email}, {password: mail.newPassword})
+                    break;
                 case Role.ADMIN:
                     await adminRepository.update({email: email}, {password: mail.newPassword})
+                    break;
             }
             return {value:'password updated'}
 
