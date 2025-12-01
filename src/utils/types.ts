@@ -14,6 +14,15 @@ export enum BookStatus {
     DROPPED
 }
 
+export enum TransactionStatus{
+    SUCCESS,
+    FAILED,
+    ONGOING
+}
+export enum TransactionType{
+    POINT_PURCHASE
+}
+
 export enum NotificationStatus{
     UNREAD,
     READ

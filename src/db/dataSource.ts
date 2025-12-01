@@ -1,7 +1,7 @@
 import {DataSource} from 'typeorm'
 import { env, DB, DB_PASSWORD, DB_USERNAME, DB_PORT, DB_HOST, DB_CONNECTION_URL } from '../config'
 import path from 'path'
-import { Admin, Author, AuthorNote, Book, Chapter, Comment, Library, LibraryBook, PaidChapter, Reply, Review, Tag, User } from '../entities'
+import { Admin, Author, AuthorNote, Book, Chapter, Comment, Library, LibraryBook, PaidChapter, Reply, Review, Tag, Transaction, User } from '../entities'
 import { AuthorNotification, UserNotification } from '../entities/notification.entity'
 import { Mail } from '../entities/mail.entity'
 
@@ -34,6 +34,7 @@ export const AppDataSource = new DataSource({
         AuthorNote,
         Tag,
         Admin,
-        Mail
+        Mail,
+        Transaction
     ]
 })

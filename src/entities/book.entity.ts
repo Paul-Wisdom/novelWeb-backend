@@ -43,6 +43,15 @@ export class Book{
 
     @Column({default: BookStatus.ONGOING})
     status: BookStatus
+
+    @Column({default: false})
+    monetized: boolean
+
+    @Column({default: 0})
+    totalPointsEarned: number
+
+    @Column({default: 0})
+    totalPointsAvailable: number
 }
 
 @Entity('authorNote')

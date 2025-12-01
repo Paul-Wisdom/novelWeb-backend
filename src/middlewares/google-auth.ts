@@ -74,7 +74,7 @@ googleAuthRouter.get('/google/callback', async (req, res) => {
             library.libraryBooks = []
 
             const { userId, username } = await userRepository.save(userRepository.create({ username: googleUser.name + randomCode, email: googleUser.email, profilePhotoUrl: googleUser.picture, library: library }))
-            
+            await mailRepository.save(mailRepository.create({mail: googleUser.email, verified: true, userRole: Role.USER}))
             userData = { id: userId, username, role: Role.USER }
             token = jwt.sign(userData, JWT_SECRET, { expiresIn: '1h' })
            

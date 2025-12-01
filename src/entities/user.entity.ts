@@ -40,4 +40,7 @@ export class User{
     @OneToMany(() => UserNotification, (userNotfification) => userNotfification.user)
     notifications: Relation<UserNotification[]>
 
+    @Column({default: 0})
+    points: number
+
 }

@@ -37,7 +37,9 @@ AppDataSource.initialize().then((res) => {
         maxFileSize: 10_000_000
     }))
 
-
+    app.get('/payment-callback', (req, res) => {
+        res.json({message: 'we are verifying the status of transaction'})
+    });
     app.use('/graphql', expressMiddleware(server, {
         context: async ({ req }): Promise<Context> => {
             let returnObj: Context = {}

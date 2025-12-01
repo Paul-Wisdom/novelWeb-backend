@@ -32,3 +32,9 @@ export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID as string
 export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET as string
 export const GOOGLE_AUTHORIZATION_URL = process.env.GOOGLE_AUTHORIZATION_URL as string
 export const GOOGLE_OAUTH_CALLBACK_URL = process.env.GOOGLE_OAUTH_CALLBACK_URL as string
+
+export const PAY_STACK_SECRET_KEY = process.env.PAY_STACK_SECRET_KEY
+export const PAYSTACK_API_URL = process.env.PAYSTACK_API_URL
+export const PAYSTACK_CALLBACK_URL = process.env.PAYSTACK_CALLBACK_URL
+
+export const POINTS_PER_CHAPTER = Number(process.env.POINTS_PER_CHAPTER as string)

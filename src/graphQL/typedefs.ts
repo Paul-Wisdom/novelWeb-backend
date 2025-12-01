@@ -67,6 +67,7 @@ export const typeDefs = `#graphql
         joined: String!
         profilePhotoUrl: String
         notifications: [UserNotification!]!
+        points: Int!
     }
 
     type Review {
@@ -125,6 +126,10 @@ export const typeDefs = `#graphql
     type StringOutput {
         value: String!
     }
+
+    type Redirect {
+        url: String!
+    }
     union CombinedUser = Author | User | Admin
 
     type Query {
@@ -160,6 +165,7 @@ export const typeDefs = `#graphql
         addChapter (addChapterInput: AddChapterInput): Book
         deleteChapter (chapterId: String!): StringOutput!
         addBookToLibrary (bookId: String!): LibraryBook
+        changeBookStatus (bookId: String!, status: Int!): Book!
         deleteBookFromLibrary (libraryBookId: String): Library
         updateLibraryBookPaidChapters (libraryBookId: String!, newPaidChapterId: String!): LibraryBook
         addReview (reviewInput: ReviewInput!): Review
@@ -175,6 +181,9 @@ export const typeDefs = `#graphql
         changeAdminPassword(adminId: String!, oldPassword: String!, newPassword: String!): Admin!
         uploadUserProfileImage(file: Upload!): File!
         uploadBookImage(file: Upload!, bookId: String!): File!
+        initializePointPurchase (amount: Int!): Redirect!
+        completePointPurchase (transactionId: String!): User!
+        purchaseChapter(chapterId: String!): Chapter!
     }
 
     input CreateUserInput {

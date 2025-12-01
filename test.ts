@@ -2,6 +2,7 @@
 // import { Library, User } from "./src/entities"
 
 import { randomBytes } from "crypto";
+import { BookStatus } from "./src/utils/types";
 
 // const test = async () => { 
 // await AppDataSource.query('CREATE SCHEMA public;')
@@ -26,5 +27,5 @@ import { randomBytes } from "crypto";
 // console.log(new Date())
 // console.log(new Date(Date.now() + (30*60*1000)))
 
-const code = randomBytes(2).toString('hex');
-console.log(code)
+// const code = randomBytes(2).toString('hex');
+// console.log(code)

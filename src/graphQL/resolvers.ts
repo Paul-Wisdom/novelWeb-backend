@@ -1,17 +1,18 @@
 import { __Type, GraphQLError } from "graphql"
 import { AppDataSource } from "../db/dataSource"
-import { Admin, Author, AuthorNote, Book, Chapter, Comment, Library, LibraryBook, PaidChapter, Reply, Review, Tag, User } from "../entities"
-import { Context, NotificationStatus, Role } from "../utils/types"
+import { Admin, Author, AuthorNote, Book, Chapter, Comment, Library, LibraryBook, PaidChapter, Reply, Review, Tag, Transaction, User } from "../entities"
+import { Context, NotificationStatus, Role, TransactionStatus, TransactionType } from "../utils/types"
 import { errorHandler, generatePassword, verifyLogin } from "../utils"
 import { compare, hash } from "bcryptjs"
-import { PASSWORD_HASH_SALT } from "../config"
+import { PASSWORD_HASH_SALT, POINTS_PER_CHAPTER } from "../config"
 import { AuthorNotification, UserNotification } from "../entities/notification.entity"
 import { Mail } from "../entities/mail.entity"
-import {GraphQLUpload, FileUpload } from "graphql-upload-ts"
+import { GraphQLUpload, FileUpload } from "graphql-upload-ts"
 import { create } from "domain"
 import { imageUploadStream } from "../services/fileService"
 import { addEmailToQueue } from "../services/queues/producers/emailProducer"
 import emailTemplates from "../services/mailService/templates"
+import PaymentService from "../services/paymentService"
 
 const authorRepository = AppDataSource.getRepository(Author)
 const bookRepository = AppDataSource.getRepository(Book)
@@ -29,6 +30,7 @@ const replyRepository = AppDataSource.getRepository(Reply)
 const authorNotificationRepo = AppDataSource.getRepository(AuthorNotification)
 const userNotificationRepo = AppDataSource.getRepository(UserNotification)
 const mailRepository = AppDataSource.getRepository(Mail)
+const transactionRepository = AppDataSource.getRepository(Transaction);
 
 export const resolvers = {
     CombinedUser: {
@@ -124,13 +126,18 @@ export const resolvers = {
                 }
                 const chapter = await chapterRepository.findOne({ where: { chapterId: args.chapterId, book: { bookId: args.bookId } } })
                 if (!chapter) throw errorHandler('Chapter of Book not found', 'NOT_FOUND')
-                const paidChapter = await paidChapterRepo.findOne({ where: { chapterId: chapter?.chapterId } })
+                const paidChapter = await paidChapterRepo.findOne({ where: { chapterId: chapter?.chapterId, libraryBook: libraryBook } })
                 if (!chapter!.paywall || paidChapter) {
                     libraryBook.currentChapter = chapter!.number
                     await libraryBookRepository.save(libraryBook)
                     return chapter
                 }
                 throw errorHandler('Access to locked chapter denied', 'FORBIDDEN')
+            }
+            else if (context.admin) {
+                const chapter = await chapterRepository.findOne({ where: { chapterId: args.chapterId, book: { bookId: args.bookId } } })
+                if (!chapter) throw errorHandler('Chapter of Book not found', 'NOT_FOUND')
+                return chapter
             }
             else throw errorHandler('Unauthorized', 'UNAUTHORIZED');
         },
@@ -182,9 +189,9 @@ export const resolvers = {
             const password = args.loginInput.password
 
             if (!email || !password) throw errorHandler('Email or Password not provided', 'BAD_USER_INPUT', args.loginInput)
-            
-            const verifiedMail = await mailRepository.findOne({where: {mail: email, verified: true}})
-            if(!verifiedMail) throw errorHandler('Email not verified', 'UNAUTHORIZED');
+
+            const verifiedMail = await mailRepository.findOne({ where: { mail: email, verified: true } })
+            if (!verifiedMail) throw errorHandler('Email not verified', 'UNAUTHORIZED');
             const user = await userRepository.findOne({ where: { email: email } })
             if (user) {
                 token = await verifyLogin({ password: user.password, id: user.userId, role: Role.USER, username: user.username }, args.loginInput) as string
@@ -216,70 +223,70 @@ export const resolvers = {
             throw errorHandler('Invalid Email or password', 'BAD_USER_INPUT', args.loginInput)
 
         },
-        forgetPasswordRequest: async (_: null, args: {email: string, newPassword: string}) => {
+        forgetPasswordRequest: async (_: null, args: { email: string, newPassword: string }) => {
             const email = args.email
             const newPassword = args.newPassword
 
-            if(!email || !newPassword) throw errorHandler('Email or password missing', 'BAD_USER_INPUT')
-            const mail = await mailRepository.findOne({where: {mail: email}})
+            if (!email || !newPassword) throw errorHandler('Email or password missing', 'BAD_USER_INPUT')
+            const mail = await mailRepository.findOne({ where: { mail: email } })
             if (!mail) throw errorHandler('Email not found', 'NOT_FOUND')
-            
+
             mail.passwordChangeCode = generatePassword()
-            mail.passwordCodeExpiry = new Date (Date.now() + (30*60*1000))
+            mail.passwordCodeExpiry = new Date(Date.now() + (30 * 60 * 1000))
             mail.newPassword = await hash(newPassword, 7)
             await mailRepository.save(mail)
-            await addEmailToQueue({to: mail.mail, subject: 'PASSWORD CHANGE REQUEST', content: emailTemplates.passwordChangeCodeTemplate(mail.mail, mail.passwordChangeCode)})
-            return {value:'mail sent'}
+            await addEmailToQueue({ to: mail.mail, subject: 'PASSWORD CHANGE REQUEST', content: emailTemplates.passwordChangeCodeTemplate(mail.mail, mail.passwordChangeCode) })
+            return { value: 'mail sent' }
         },
-        forgetPassword: async (_: null, args: {code: string, email: string}) => {
+        forgetPassword: async (_: null, args: { code: string, email: string }) => {
             const code = args.code
             const email = args.email
 
-            if(!email || !code) throw errorHandler('Email or OTP missing', 'BAD_USER_INPUT')
+            if (!email || !code) throw errorHandler('Email or OTP missing', 'BAD_USER_INPUT')
 
-            const mail = await mailRepository.findOne({where: {mail: email}});
-            if(!mail) throw errorHandler('Email does not exist', 'NOT_FOUND')
-            else if(new Date() > mail.passwordCodeExpiry) throw errorHandler('Password change code has expired', 'FORBIDDEN')
+            const mail = await mailRepository.findOne({ where: { mail: email } });
+            if (!mail) throw errorHandler('Email does not exist', 'NOT_FOUND')
+            else if (new Date() > mail.passwordCodeExpiry) throw errorHandler('Password change code has expired', 'FORBIDDEN')
             else if (code !== mail.passwordChangeCode) throw errorHandler('Wrong Verification Code', 'UNAUTHORIZED')
 
-            switch(mail.userRole){
+            switch (mail.userRole) {
                 case Role.USER:
-                    await userRepository.update({email: email}, {password: mail.newPassword})
+                    await userRepository.update({ email: email }, { password: mail.newPassword })
                     break;
                 case Role.AUTHOR:
-                    await authorRepository.update({email: email}, {password: mail.newPassword})
+                    await authorRepository.update({ email: email }, { password: mail.newPassword })
                     break;
                 case Role.ADMIN:
-                    await adminRepository.update({email: email}, {password: mail.newPassword})
+                    await adminRepository.update({ email: email }, { password: mail.newPassword })
                     break;
             }
-            return {value:'password updated'}
+            return { value: 'password updated' }
 
         },
-        verifyMail: async (_: null, args: {email: string, verificationCode: string}) => {
+        verifyMail: async (_: null, args: { email: string, verificationCode: string }) => {
             const email = args.email
             const code = args.verificationCode
 
-            if(!email || !code) throw errorHandler('Email or OTP missing', 'BAD_USER_INPUT')
+            if (!email || !code) throw errorHandler('Email or OTP missing', 'BAD_USER_INPUT')
 
-            const mail = await mailRepository.findOne({where: {mail: email}});
-            if(!mail) throw errorHandler('Email does not exist', 'NOT_FOUND')
-            else if(new Date() > mail.verificationCodeExpiry) throw errorHandler('Verification code has expired', 'FORBIDDEN')
+            const mail = await mailRepository.findOne({ where: { mail: email } });
+            if (!mail) throw errorHandler('Email does not exist', 'NOT_FOUND')
+            else if (new Date() > mail.verificationCodeExpiry) throw errorHandler('Verification code has expired', 'FORBIDDEN')
             else if (code !== mail.verificationCode) throw errorHandler('Wrong Verification Code', 'UNAUTHORIZED')
-            
+
             mail.verified = true
             await mailRepository.save(mail);
-            return {value:'mail verified'}
+            return { value: 'mail verified' }
         },
-        resendVerificationCode: async (_: null, args: {email: string}) => {
-            const mail = await mailRepository.findOne({where: {mail: args.email, verified: false}})
+        resendVerificationCode: async (_: null, args: { email: string }) => {
+            const mail = await mailRepository.findOne({ where: { mail: args.email, verified: false } })
             if (!mail) throw errorHandler('Unverified email not found', 'NOT_FOUND')
 
             mail.verificationCode = generatePassword()
-            mail.verificationCodeExpiry = new Date(Date.now() + (30*60*1000))
+            mail.verificationCodeExpiry = new Date(Date.now() + (30 * 60 * 1000))
             await mailRepository.save(mail)
-            await addEmailToQueue({to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION'})
-            return {value:'mail sent'}
+            await addEmailToQueue({ to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION' })
+            return { value: 'mail sent' }
         },
         createAdmin: async (_: null, args: {
             username: string,
@@ -300,8 +307,8 @@ export const resolvers = {
             console.log(password)
             const hashedPassword = await hash(password, 7)
             const admin = await adminRepository.save(adminRepository.create({ username: username, email: email, password: hashedPassword }))
-            await mailRepository.save(mailRepository.create({mail: admin.email, verified: true, userRole: Role.ADMIN}))
-            await addEmailToQueue({to: admin.email, subject: 'WELCOME MAIL', content: emailTemplates.adminWelcomeEmailTemplate(admin.username, password)})
+            await mailRepository.save(mailRepository.create({ mail: admin.email, verified: true, userRole: Role.ADMIN }))
+            await addEmailToQueue({ to: admin.email, subject: 'WELCOME MAIL', content: emailTemplates.adminWelcomeEmailTemplate(admin.username, password) })
             return admin
         },
         changeAdminPassword: async (_: null, args: { adminId: string, oldPassword: string, newPassword: string }, context: Context) => {
@@ -322,7 +329,7 @@ export const resolvers = {
         deleteAdmin: async (_: null, args: { adminId: string }, context: Context) => {
             if (context.superAdmin) {
                 await adminRepository.delete({ adminId: args.adminId })
-                return {value:'Admin deleted'}
+                return { value: 'Admin deleted' }
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
@@ -345,8 +352,8 @@ export const resolvers = {
             if (mailExists) throw errorHandler('Mail already in use', 'BAD_USER_INPUT')
             const hashedPassword = await hash(args.createUserInput.password, 7)//PASSWORD_HASH_SALT);
             const author = await authorRepository.save(authorRepository.create({ username: args.createUserInput.username, email: args.createUserInput.email, password: hashedPassword, books: [] }))
-            const mail = await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email, verificationCode: generatePassword(), verificationCodeExpiry: new Date (Date.now() + (30*60*1000)) , userRole: Role.AUTHOR}))
-            await addEmailToQueue({to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION'})
+            const mail = await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email, verificationCode: generatePassword(), verificationCodeExpiry: new Date(Date.now() + (30 * 60 * 1000)), userRole: Role.AUTHOR }))
+            await addEmailToQueue({ to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION' })
             console.log(author)
             return author
         },
@@ -369,8 +376,8 @@ export const resolvers = {
             const hashedPassword = await hash(password, 7);
             const user = await userRepository.save(userRepository.create({ username: username, email: email, password: hashedPassword, library: library }))
             console.log(user)
-            const mail = await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email, verificationCode: generatePassword(), verificationCodeExpiry: new Date (Date.now() + (30*60*1000)), userRole: Role.USER }))
-            await addEmailToQueue({to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION'})
+            const mail = await mailRepository.save(mailRepository.create({ mail: args.createUserInput.email, verificationCode: generatePassword(), verificationCodeExpiry: new Date(Date.now() + (30 * 60 * 1000)), userRole: Role.USER }))
+            await addEmailToQueue({ to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION' })
             return user
         },
         createBook: async (_: null, args: { createBookInput: { name: string, summary: string, tagIds: string[] } }, context: Context) => {
@@ -390,6 +397,17 @@ export const resolvers = {
             const book = await bookRepository.save(bookRepository.create({ name: name, summary: summary, tags: cleanedTags, author: context.author }))
             console.log(book)
             return book
+        },
+        changeBookStatus: async (_: null, args: { bookId: string, status: number }, context: Context) => {
+            if (!context.author) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+
+            const book = await bookRepository.findOne({ where: { bookId: args.bookId, author: context.author } });
+            if (!book) throw errorHandler('book not found', 'NOT_FOUND');
+            else {
+                book.status = args.status
+                const savedBook = await bookRepository.save(book);
+                return savedBook
+            }
         },
         createTag: async (_: null, args: { tagName: string }, context: Context) => {
             if (!context.admin && !context.superAdmin) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
@@ -414,8 +432,11 @@ export const resolvers = {
             if (!book) {
                 throw errorHandler('Book with bookId provided not found', 'BAD_USER_INPUT')
             }
-            if (book.author.authorId !== context.author.authorId) {
+            else if (book.author.authorId !== context.author.authorId) {
                 throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            }
+            else if (!book.monetized) {
+                throw errorHandler('Book not available for monetization yet', 'FORBIDDEN')
             }
             const chapter = await chapterRepository.save(chapterRepository.create({ number: number, title: title, content: content, paywall: paywall, book: book }))
             return chapter
@@ -429,7 +450,7 @@ export const resolvers = {
             if (chapter?.book.author.authorId !== context.author.authorId) throw errorHandler('Unauthorized', 'UNAUTHORIZED');
 
             await chapterRepository.delete({ chapterId: args.chapterId })
-            return {value: 'chapter deleted successfully'}
+            return { value: 'chapter deleted successfully' }
         },
         addBookToLibrary: async (_: null, args: { bookId: string }, context: Context) => {
             if (!context.user) throw errorHandler('Unauthorized', 'UNAUTHORIZED');
@@ -526,7 +547,7 @@ export const resolvers = {
         deleteReply: async (_: null, args: { replyId: string }, context: Context) => {
             if (context.user) {
                 await replyRepository.delete({ replyId: args.replyId, user: context.user })
-                return {value: 'reply deleted'}
+                return { value: 'reply deleted' }
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
@@ -582,12 +603,79 @@ export const resolvers = {
                     book.photoUrl = uploadedFile.url
                     await bookRepository.save(book)
 
-                    return  uploadedFile
+                    return uploadedFile
                 } catch (e) {
                     console.log(e)
                     throw errorHandler('Error uploading image', 'INTERNAL_SERVER_ERROR')
                 }
             }
         },
-    }    
+
+        initializePointPurchase: async (_: null, args: { amount: number }, context: Context) => {
+            if (!context.user) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            else {
+                const amount = args.amount
+
+                if (isNaN(Number(amount)) || amount < 500 || (amount % 10) !== 0) {
+                    throw errorHandler('Amount must be a multiple of 10 and a minimum of 500', 'FORBIDDEN')
+                }
+
+                await transactionRepository.delete({ userEmail: context.user.email, type: TransactionType.POINT_PURCHASE, status: TransactionStatus.ONGOING })
+                const transaction = await transactionRepository.save(transactionRepository.create({ userEmail: context.user.email, type: TransactionType.POINT_PURCHASE, points: amount / 10 }))
+
+                const responseData = await PaymentService.initializeTransaction(context.user.email, amount, transaction.transactionId)
+
+                await userNotificationRepo.save(userNotificationRepo.create({ user: context.user, title: 'Payment Initialization', content: `Your purchase of ${amount / 10} points has been initialized. Please process the payment with reference id ${transaction.transactionId} to complete the purchase.` }))
+                if (responseData) return { url: responseData.authorization_url }
+
+            }
+        },
+        completePointPurchase: async (_: null, args: { transactionId: string }, context: Context) => {
+            if (!context.user) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            else {
+                const transactionId = args.transactionId;
+                const transaction = await transactionRepository.findOne({ where: { transactionId: transactionId, status: TransactionStatus.ONGOING } });
+                if (transaction && transaction.userEmail === context.user.email) {
+                    const response = await PaymentService.verifyTransaction(transactionId)
+                    if (response && response.status === 'success') {
+                        transaction.paidAt = new Date(response.paid_at)
+                        transaction.status = TransactionStatus.SUCCESS
+
+                        context.user.points += transaction.points
+                        const user = await userRepository.save(context.user);
+                        await transactionRepository.save(transaction)
+                        await userNotificationRepo.save(userNotificationRepo.create({ user: context.user, title: 'Payment Completion', content: `Your purchase of ${transaction.points} points is completed and your balance has been updated accordingly.` }))
+
+                        return user
+                    }
+                }
+                else throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            }
+        },
+        purchaseChapter: async (_: null, args: { chapterId: string }, context: Context) => {
+            if (!context.user) throw errorHandler('Unauthorized', 'UNAUTHORIZED')
+            else {
+                const chapter = await chapterRepository.findOne({where: {chapterId: args.chapterId}, relations: ['book']});
+                if(chapter && chapter.paywall){
+                    if(context.user.points < POINTS_PER_CHAPTER) throw errorHandler('Insufficient points', 'NOT_FOUND')
+                    const paidChapter = await paidChapterRepo.findOne({where: {chapterId: chapter.chapterId}});
+                    if (paidChapter) throw errorHandler('Chapter already purchased', 'FORBIDDEN')
+
+                    const book = chapter.book
+                    const libraryBook = context.user.library.libraryBooks.find(lb => lb.bookId === book.bookId)
+                    if(libraryBook){
+                        await paidChapterRepo.save(paidChapterRepo.create({chapterId: chapter.chapterId, libraryBook}));
+                        context.user.points -= POINTS_PER_CHAPTER
+                        book.totalPointsAvailable += POINTS_PER_CHAPTER
+                        book.totalPointsEarned += POINTS_PER_CHAPTER
+
+                        await bookRepository.save(book);
+                        await userRepository.save(context.user)
+                        return chapter;
+                    }
+                }
+                throw errorHandler('Chapter not found', 'NOT_FOUND')
+            }
+        }
+    }
 }
