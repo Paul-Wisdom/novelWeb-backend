@@ -1,36 +1,17 @@
-import { __Type, GraphQLError } from "graphql"
-import { AppDataSource } from "../db/dataSource"
-import { Admin, Author, AuthorNote, Book, Chapter, Comment, Library, LibraryBook, PaidChapter, Reply, Review, Tag, Transaction, User } from "../entities"
-import { Context, NotificationStatus, Role, TransactionStatus, TransactionType } from "../utils/types"
-import { errorHandler, generatePassword, verifyLogin } from "../utils"
+import { __Type } from "graphql"
+import { BookSort, Context, NotificationStatus, Role, TransactionStatus, TransactionType } from "../utils/types"
+import { errorHandler, generatePassword, sortBooks, verifyLogin } from "../utils"
 import { compare, hash } from "bcryptjs"
 import { PASSWORD_HASH_SALT, POINTS_PER_CHAPTER } from "../config"
-import { AuthorNotification, UserNotification } from "../entities/notification.entity"
-import { Mail } from "../entities/mail.entity"
 import { GraphQLUpload, FileUpload } from "graphql-upload-ts"
-import { create } from "domain"
 import { imageUploadStream } from "../services/fileService"
 import { addEmailToQueue } from "../services/queues/producers/emailProducer"
 import emailTemplates from "../services/mailService/templates"
 import PaymentService from "../services/paymentService"
+import { adminRepository, authorNoteRepository, authorNotificationRepository, authorRepository, bookRepository, chapterRepository, commentRepository, libraryBookRepository, libraryRepository, mailRepository, paidChapterRepository, replyRepository, reviewRepository, tagRepository, transactionRepository, userNotificationRepository, userRepository } from "../db/repositories"
+import { Library } from "../entities"
 
-const authorRepository = AppDataSource.getRepository(Author)
-const bookRepository = AppDataSource.getRepository(Book)
-const authorNoteRepo = AppDataSource.getRepository(AuthorNote)
-const tagRepository = AppDataSource.getRepository(Tag)
-const userRepository = AppDataSource.getRepository(User)
-const adminRepository = AppDataSource.getRepository(Admin)
-const chapterRepository = AppDataSource.getRepository(Chapter)
-const paidChapterRepo = AppDataSource.getRepository(PaidChapter)
-const libraryRepository = AppDataSource.getRepository(Library)
-const libraryBookRepository = AppDataSource.getRepository(LibraryBook)
-const reviewRepository = AppDataSource.getRepository(Review)
-const commentRepository = AppDataSource.getRepository(Comment)
-const replyRepository = AppDataSource.getRepository(Reply)
-const authorNotificationRepo = AppDataSource.getRepository(AuthorNotification)
-const userNotificationRepo = AppDataSource.getRepository(UserNotification)
-const mailRepository = AppDataSource.getRepository(Mail)
-const transactionRepository = AppDataSource.getRepository(Transaction);
+
 
 export const resolvers = {
     CombinedUser: {
@@ -60,13 +41,14 @@ export const resolvers = {
         author: async (_: null, args: { username: string }) => {
             return await authorRepository.find({ where: { username: args.username } })
         },
-        books: async (_: null, args: { name?: string }) => {
+        books: async (_: null, args: { name?: string, sortBy: BookSort }) => {
             if (args.name) {
                 return await bookRepository.find({ where: { name: args.name } })
             }
-            const books = await bookRepository.find({ relations: ['author', 'tags'] })
+            const books = await bookRepository.find({ relations: ['author', 'tags', 'reviews'] })
             console.log(books)
-            return books
+            const sortedBooks = sortBooks(books, args.sortBy);
+            return sortedBooks;
         },
         book: async (_: null, args: { name?: string, authorName?: string, bookId?: string }) => {
             let book;
@@ -81,12 +63,13 @@ export const resolvers = {
             const tags = await tagRepository.find({})
             return tags
         },
-        findBooksByTags: async (_: null, args: { tagIds: string[] }) => {
+        findBooksByTags: async (_: null, args: { tagIds: string[], sortBy: BookSort  }) => {
             const tagIds = args.tagIds
             const tags = await Promise.all(tagIds.map(tagId => tagRepository.findOne({ where: { tagId: tagId } })))
             const cleanedTags = tags.filter(tag => tag !== null)
             const books = await bookRepository.createQueryBuilder('book').where('book.tags @> :tags', { tags: cleanedTags }).getMany()
-            return books
+            const sortedBooks = sortBooks(books, args.sortBy);
+            return sortedBooks;
         },
         user: async (_: null, args: { username?: string, id: string }) => {
             if (args.id) {
@@ -126,7 +109,7 @@ export const resolvers = {
                 }
                 const chapter = await chapterRepository.findOne({ where: { chapterId: args.chapterId, book: { bookId: args.bookId } } })
                 if (!chapter) throw errorHandler('Chapter of Book not found', 'NOT_FOUND')
-                const paidChapter = await paidChapterRepo.findOne({ where: { chapterId: chapter?.chapterId, libraryBook: libraryBook } })
+                const paidChapter = await paidChapterRepository.findOne({ where: { chapterId: chapter?.chapterId, libraryBook: libraryBook } })
                 if (!chapter!.paywall || paidChapter) {
                     libraryBook.currentChapter = chapter!.number
                     await libraryBookRepository.save(libraryBook)
@@ -158,10 +141,10 @@ export const resolvers = {
         },
         authorNotification: async (_: null, args: { notificationId: string }, context: Context) => {
             if (context.author) {
-                const notification = await authorNotificationRepo.findOne({ where: { author: context.author, notificationId: args.notificationId } })
+                const notification = await authorNotificationRepository.findOne({ where: { author: context.author, notificationId: args.notificationId } })
                 if (notification) {
                     notification.status = NotificationStatus.READ
-                    const updatedNotification = await authorNotificationRepo.save(notification);
+                    const updatedNotification = await authorNotificationRepository.save(notification);
                     return updatedNotification
                 }
                 throw errorHandler('Notification Not Found', 'NOT_FOUND')
@@ -170,10 +153,10 @@ export const resolvers = {
         },
         userNotification: async (_: null, args: { notificationId: string }, context: Context) => {
             if (context.user) {
-                const notification = await userNotificationRepo.findOne({ where: { user: context.user, notificationId: args.notificationId } })
+                const notification = await userNotificationRepository.findOne({ where: { user: context.user, notificationId: args.notificationId } })
                 if (notification) {
                     notification.status = NotificationStatus.READ
-                    const updatedNotification = await userNotificationRepo.save(notification);
+                    const updatedNotification = await userNotificationRepository.save(notification);
                     return updatedNotification
                 }
                 throw errorHandler('Notification Not Found', 'NOT_FOUND')
@@ -439,6 +422,8 @@ export const resolvers = {
                 throw errorHandler('Book not available for monetization yet', 'FORBIDDEN')
             }
             const chapter = await chapterRepository.save(chapterRepository.create({ number: number, title: title, content: content, paywall: paywall, book: book }))
+            book.updatedAt = new Date();
+            await bookRepository.save(book);
             return chapter
         },
         deleteChapter: async (_: null, args: { chapterId: string }, context: Context) => {
@@ -473,10 +458,10 @@ export const resolvers = {
             if (context.user) {
                 const libraryBook = await libraryBookRepository.findOne({ where: { libraryBookId: args.libraryBookId, library: context.user.library } });
                 if (libraryBook) {
-                    const paidChapter = await paidChapterRepo.save(paidChapterRepo.create({ chapterId: args.newPaidChapterId, libraryBook: libraryBook }));
+                    const paidChapter = await paidChapterRepository.save(paidChapterRepository.create({ chapterId: args.newPaidChapterId, libraryBook: libraryBook }));
                     const allPaidChapters = libraryBook.paidChapters.concat(paidChapter);
                     libraryBook.paidChapters = allPaidChapters
-                    await paidChapterRepo.save(paidChapter)
+                    await paidChapterRepository.save(paidChapter)
                     await libraryBookRepository.save(libraryBook);
                 }
                 throw errorHandler('Book not in library', 'FORBIDDEN')
@@ -555,9 +540,9 @@ export const resolvers = {
             if (context.author) {
                 const book = await bookRepository.findOne({ where: { bookId: args.bookId } })
                 if (book) {
-                    const authorNote = await authorNoteRepo.save(authorNoteRepo.create({ note: args.content }))
+                    const authorNote = await authorNoteRepository.save(authorNoteRepository.create({ note: args.content }))
                     book.authorNotes = book.authorNotes.concat(authorNote)
-                    await authorNoteRepo.save(authorNote)
+                    await authorNoteRepository.save(authorNote)
                     await bookRepository.save(book)
                     return book
                 }
@@ -625,7 +610,7 @@ export const resolvers = {
 
                 const responseData = await PaymentService.initializeTransaction(context.user.email, amount, transaction.transactionId)
 
-                await userNotificationRepo.save(userNotificationRepo.create({ user: context.user, title: 'Payment Initialization', content: `Your purchase of ${amount / 10} points has been initialized. Please process the payment with reference id ${transaction.transactionId} to complete the purchase.` }))
+                await userNotificationRepository.save(userNotificationRepository.create({ user: context.user, title: 'Payment Initialization', content: `Your purchase of ${amount / 10} points has been initialized. Please process the payment with reference id ${transaction.transactionId} to complete the purchase.` }))
                 if (responseData) return { url: responseData.authorization_url }
 
             }
@@ -644,7 +629,7 @@ export const resolvers = {
                         context.user.points += transaction.points
                         const user = await userRepository.save(context.user);
                         await transactionRepository.save(transaction)
-                        await userNotificationRepo.save(userNotificationRepo.create({ user: context.user, title: 'Payment Completion', content: `Your purchase of ${transaction.points} points is completed and your balance has been updated accordingly.` }))
+                        await userNotificationRepository.save(userNotificationRepository.create({ user: context.user, title: 'Payment Completion', content: `Your purchase of ${transaction.points} points is completed and your balance has been updated accordingly.` }))
 
                         return user
                     }
@@ -658,13 +643,13 @@ export const resolvers = {
                 const chapter = await chapterRepository.findOne({where: {chapterId: args.chapterId}, relations: ['book']});
                 if(chapter && chapter.paywall){
                     if(context.user.points < POINTS_PER_CHAPTER) throw errorHandler('Insufficient points', 'NOT_FOUND')
-                    const paidChapter = await paidChapterRepo.findOne({where: {chapterId: chapter.chapterId}});
+                    const paidChapter = await paidChapterRepository.findOne({where: {chapterId: chapter.chapterId}});
                     if (paidChapter) throw errorHandler('Chapter already purchased', 'FORBIDDEN')
 
                     const book = chapter.book
                     const libraryBook = context.user.library.libraryBooks.find(lb => lb.bookId === book.bookId)
                     if(libraryBook){
-                        await paidChapterRepo.save(paidChapterRepo.create({chapterId: chapter.chapterId, libraryBook}));
+                        await paidChapterRepository.save(paidChapterRepository.create({chapterId: chapter.chapterId, libraryBook}));
                         context.user.points -= POINTS_PER_CHAPTER
                         book.totalPointsAvailable += POINTS_PER_CHAPTER
                         book.totalPointsEarned += POINTS_PER_CHAPTER

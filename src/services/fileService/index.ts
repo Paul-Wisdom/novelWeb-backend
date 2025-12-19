@@ -1,6 +1,5 @@
 import { FileUploadCreateReadStream } from "graphql-upload/processRequest.mjs"
 import cloudinary from "./config"
-import { resolve } from "path"
 
 export const imageUploadStream = async ({folder, publicId, createReadStream}:{folder: string, publicId: string, createReadStream: FileUploadCreateReadStream}): Promise<{url: string, publicId: string}> => {
     const stream = createReadStream()

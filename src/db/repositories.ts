@@ -1,0 +1,20 @@
+import { Admin, Author, AuthorNote, Book, AuthorNotification, UserNotification, Mail, Chapter, Comment, Library, LibraryBook, PaidChapter, Reply, Review, Tag, Transaction, User } from "../entities";
+import { AppDataSource } from "../db/dataSource";
+
+export const authorRepository = AppDataSource.getRepository(Author);
+export const bookRepository = AppDataSource.getRepository(Book);
+export const authorNoteRepository = AppDataSource.getRepository(AuthorNote);
+export const tagRepository = AppDataSource.getRepository(Tag);
+export const userRepository = AppDataSource.getRepository(User);
+export const adminRepository = AppDataSource.getRepository(Admin);
+export const chapterRepository = AppDataSource.getRepository(Chapter);
+export const paidChapterRepository = AppDataSource.getRepository(PaidChapter);
+export const libraryRepository = AppDataSource.getRepository(Library);
+export const libraryBookRepository = AppDataSource.getRepository(LibraryBook);
+export const reviewRepository = AppDataSource.getRepository(Review);
+export const commentRepository = AppDataSource.getRepository(Comment);
+export const replyRepository = AppDataSource.getRepository(Reply);
+export const authorNotificationRepository = AppDataSource.getRepository(AuthorNotification);
+export const userNotificationRepository = AppDataSource.getRepository(UserNotification);
+export const mailRepository = AppDataSource.getRepository(Mail);
+export const transactionRepository = AppDataSource.getRepository(Transaction);

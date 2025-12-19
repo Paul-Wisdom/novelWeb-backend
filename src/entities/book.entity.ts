@@ -41,6 +41,9 @@ export class Book{
     @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
     createdAt: Date
 
+    @CreateDateColumn({type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP'})
+    updatedAt: Date
+
     @Column({default: BookStatus.ONGOING})
     status: BookStatus
 

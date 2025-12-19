@@ -33,15 +33,17 @@ export type JWTPayload = {
     role: Role
 }
 
-export type Context = {
+export interface Context{
     user?: User
     author?: Author
     admin?: Admin
     superAdmin?: Admin
 }
 
-export type EmailQueueJobData = {
+export interface EmailQueueJobData {
     to: string
     content: string
     subject: string
 }
+
+export type BookSort = 'latest' | 'new' | 'ratings' | 'completed'

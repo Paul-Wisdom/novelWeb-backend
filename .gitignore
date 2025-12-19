@@ -1,4 +1,4 @@
 node_modules
 .env
-clear.ts
-test.ts
+/clear.ts
+/test.ts

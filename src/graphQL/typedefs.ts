@@ -136,9 +136,9 @@ export const typeDefs = `#graphql
         me: CombinedUser!
         authors: [Author!]!
         author (username: String!): Author
-        books (name: String): [Book!]!
+        books (name: String, sortBy: String): [Book!]!
         tags: [Tag!]!
-        findBooksByTags (tagIds: [String!]!): [Book!]!
+        findBooksByTags (tagIds: [String!]!, sortBy: String): [Book!]!
         book (bookId: ID, name: String, authorName: String): Book
         user (username: String, id: ID): User
         chapter (chapterId: String!, bookId: String!): Chapter!
