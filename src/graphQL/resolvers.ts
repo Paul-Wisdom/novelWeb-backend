@@ -9,7 +9,7 @@ import { addEmailToQueue } from "../services/queues/producers/emailProducer"
 import emailTemplates from "../services/mailService/templates"
 import PaymentService from "../services/paymentService"
 import { adminRepository, authorNoteRepository, authorNotificationRepository, authorRepository, bookRepository, chapterRepository, commentRepository, libraryBookRepository, libraryRepository, mailRepository, paidChapterRepository, replyRepository, reviewRepository, tagRepository, transactionRepository, userNotificationRepository, userRepository } from "../db/repositories"
-import { Library } from "../entities"
+import { Book, Library, LibraryBook } from "../entities"
 
 
 
@@ -41,13 +41,16 @@ export const resolvers = {
         author: async (_: null, args: { username: string }) => {
             return await authorRepository.find({ where: { username: args.username } })
         },
-        books: async (_: null, args: { name?: string, sortBy: BookSort }) => {
+        books: async (_: null, args: { name?: string, sortBy: BookSort, offset: number, limit: number }) => {
+            const offset = args.offset? args.offset : 0
+            const limit = args.limit? args.limit : 10
+
             if (args.name) {
                 return await bookRepository.find({ where: { name: args.name } })
             }
             const books = await bookRepository.find({ relations: ['author', 'tags', 'reviews'] })
             console.log(books)
-            const sortedBooks = sortBooks(books, args.sortBy);
+            const sortedBooks = sortBooks(books, args.sortBy).slice(offset, limit);
             return sortedBooks;
         },
         book: async (_: null, args: { name?: string, authorName?: string, bookId?: string }) => {
@@ -126,7 +129,9 @@ export const resolvers = {
         },
         library: async (_: null, args: null, context: Context) => {
             if (context.user) {
-                return await libraryRepository.find({ where: { user: context.user } })
+                const library = await libraryRepository.findOne({ where: { user: {userId: context.user.userId} }, relations: ['libraryBooks']})
+                console.log(library);
+                return library
             }
             else throw errorHandler('Unauthorized', 'UNAUTHORIZED');
 
@@ -173,8 +178,10 @@ export const resolvers = {
 
             if (!email || !password) throw errorHandler('Email or Password not provided', 'BAD_USER_INPUT', args.loginInput)
 
-            const verifiedMail = await mailRepository.findOne({ where: { mail: email, verified: true } })
-            if (!verifiedMail) throw errorHandler('Email not verified', 'UNAUTHORIZED');
+            const mail = await mailRepository.findOne({ where: { mail: email } })
+            if (!mail) throw errorHandler('Invalid Email or password', 'BAD_USER_INPUT', args.loginInput);
+
+            else if (!mail.verified) throw errorHandler('Email not verified', 'UNAUTHORIZED');
             const user = await userRepository.findOne({ where: { email: email } })
             if (user) {
                 token = await verifyLogin({ password: user.password, id: user.userId, role: Role.USER, username: user.username }, args.loginInput) as string
@@ -219,7 +226,7 @@ export const resolvers = {
             mail.newPassword = await hash(newPassword, 7)
             await mailRepository.save(mail)
             await addEmailToQueue({ to: mail.mail, subject: 'PASSWORD CHANGE REQUEST', content: emailTemplates.passwordChangeCodeTemplate(mail.mail, mail.passwordChangeCode) })
-            return { value: 'mail sent' }
+            return true;
         },
         forgetPassword: async (_: null, args: { code: string, email: string }) => {
             const code = args.code
@@ -243,7 +250,7 @@ export const resolvers = {
                     await adminRepository.update({ email: email }, { password: mail.newPassword })
                     break;
             }
-            return { value: 'password updated' }
+            return true;
 
         },
         verifyMail: async (_: null, args: { email: string, verificationCode: string }) => {
@@ -259,7 +266,7 @@ export const resolvers = {
 
             mail.verified = true
             await mailRepository.save(mail);
-            return { value: 'mail verified' }
+            return true;
         },
         resendVerificationCode: async (_: null, args: { email: string }) => {
             const mail = await mailRepository.findOne({ where: { mail: args.email, verified: false } })
@@ -269,7 +276,7 @@ export const resolvers = {
             mail.verificationCodeExpiry = new Date(Date.now() + (30 * 60 * 1000))
             await mailRepository.save(mail)
             await addEmailToQueue({ to: mail.mail, content: emailTemplates.emailVerificationCodeTemplate(mail.mail, mail.verificationCode), subject: 'EMAIL VERIFICATION' })
-            return { value: 'mail sent' }
+            return true;
         },
         createAdmin: async (_: null, args: {
             username: string,
@@ -312,7 +319,7 @@ export const resolvers = {
         deleteAdmin: async (_: null, args: { adminId: string }, context: Context) => {
             if (context.superAdmin) {
                 await adminRepository.delete({ adminId: args.adminId })
-                return { value: 'Admin deleted' }
+                return true
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
@@ -367,16 +374,22 @@ export const resolvers = {
             const name = args.createBookInput.name
             const summary = args.createBookInput.summary
             const tagIds = args.createBookInput.tagIds
+
             if (!context.author) {
                 throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
+
             const existingBookByAuthor = await bookRepository.findOne({ where: { name: name, author: context.author } })
             if (existingBookByAuthor) throw errorHandler('Book with name already created by same author', 'BAD_USER_INPUT', name)
+
             const uniqueTagIds = Array.from(new Set(tagIds))
+            
             if (!name || name.length < 4 || !summary) throw errorHandler('Book name must be atleast 4 characters long and must contain a summary', 'BAD_USER_INPUT')
+            
             const tags = await Promise.all(uniqueTagIds.map(tagId => tagRepository.findOne({ where: { tagId: tagId } })))
             const cleanedTags = tags.filter(tag => tag !== null)
             if (cleanedTags.length < 1) throw errorHandler('Books must have a minimum of 1 valid tag', 'BAD_USER_INPUT')
+            
             const book = await bookRepository.save(bookRepository.create({ name: name, summary: summary, tags: cleanedTags, author: context.author }))
             console.log(book)
             return book
@@ -402,23 +415,24 @@ export const resolvers = {
             }
             throw errorHandler('Tag already exists', 'FORBIDDDEN')
         },
-        addChapter: async (_: null, args: { addChapterInput: { number: number, title: string, content: string, bookId: string, paywall: boolean } }, context: Context) => {
+        addChapter: async (_: null, args: { addChapterInput: { number: number, title: string, content: string, bookId: string, paywall?: boolean } }, context: Context) => {
             const number = args.addChapterInput.number
             const bookId = args.addChapterInput.bookId
             const content = args.addChapterInput.content
-            const paywall = args.addChapterInput.paywall
+            const paywall = args.addChapterInput.paywall ? args.addChapterInput.paywall : false
             const title = args.addChapterInput.title
             if (!context.author) {
                 throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
-            const book = await bookRepository.findOne({ where: { bookId: bookId } })
+            const book = await bookRepository.findOne({ where: { bookId: bookId }, relations: ['author'] })
+            console.log(book, context.author)
             if (!book) {
                 throw errorHandler('Book with bookId provided not found', 'BAD_USER_INPUT')
             }
             else if (book.author.authorId !== context.author.authorId) {
                 throw errorHandler('Unauthorized', 'UNAUTHORIZED')
             }
-            else if (!book.monetized) {
+            else if (!book.monetized && paywall) {
                 throw errorHandler('Book not available for monetization yet', 'FORBIDDEN')
             }
             const chapter = await chapterRepository.save(chapterRepository.create({ number: number, title: title, content: content, paywall: paywall, book: book }))
@@ -435,7 +449,7 @@ export const resolvers = {
             if (chapter?.book.author.authorId !== context.author.authorId) throw errorHandler('Unauthorized', 'UNAUTHORIZED');
 
             await chapterRepository.delete({ chapterId: args.chapterId })
-            return { value: 'chapter deleted successfully' }
+            return true;
         },
         addBookToLibrary: async (_: null, args: { bookId: string }, context: Context) => {
             if (!context.user) throw errorHandler('Unauthorized', 'UNAUTHORIZED');
@@ -443,7 +457,12 @@ export const resolvers = {
             const book = await bookRepository.findOne({ where: { bookId: args.bookId } })
             if (!book) throw errorHandler('No book associated with bookId', 'BAD_USER_INPUT')
 
-            const libraryBook = await libraryBookRepository.save(libraryBookRepository.create({ bookId: args.bookId, library: context.user?.library }))
+            const library = await libraryRepository.findOne({where: {user: {userId: context.user.userId}}});
+            console.log(library);
+            const existingBookInLibrary = await libraryBookRepository.findOne({where: {bookId: book.bookId, library: library!}})
+            if (existingBookInLibrary) throw errorHandler('Book already in library', 'FORBIDDEN');
+
+            const libraryBook = await libraryBookRepository.save(libraryBookRepository.create({ bookId: args.bookId, library: library! }))
             return await libraryBookRepository.save(libraryBook)
         },
         deleteBookFromLibrary: async (_: null, args: { libraryBookId: string }, context: Context) => {
@@ -518,6 +537,7 @@ export const resolvers = {
         deleteComment: async (_: null, args: { commentId: string }, context: Context) => {
             if (context.user) {
                 await commentRepository.delete({ commentId: args.commentId, user: context.user })
+                return true
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
@@ -532,7 +552,7 @@ export const resolvers = {
         deleteReply: async (_: null, args: { replyId: string }, context: Context) => {
             if (context.user) {
                 await replyRepository.delete({ replyId: args.replyId, user: context.user })
-                return { value: 'reply deleted' }
+                return true;
             }
             throw errorHandler('Unauthorized', 'UNAUTHORIZED')
         },
@@ -661,6 +681,38 @@ export const resolvers = {
                 }
                 throw errorHandler('Chapter not found', 'NOT_FOUND')
             }
+        }
+    },
+
+    Book: {
+        rating: async (parent: Book) => {
+            const reviews = await reviewRepository.find({where: {book: parent}});
+            const totalRating = reviews.length > 0 ? reviews.map(r => Number(r.rating)).reduce((a,b) => a + b) : 0;
+
+            const rating = totalRating > 0? (totalRating / reviews.length).toFixed(2) : 0.00;
+            return rating;
+        },
+        chapters: async (parent: Book, args: {offset?: number, limit?: number}) => {
+            const offset = args.offset? args.offset : 0
+            const limit = args.limit? args.limit : 50
+
+            const chapters = await chapterRepository.find({where: {book: parent}, skip: offset, take: limit});
+            return chapters;
+        },
+        comments: async (parent: Book, args: {offset?: number, limit?: number}) => {
+            const offset = args.offset? args.offset : 0
+            const limit = args.limit? args.limit : 50
+
+            const comments = await commentRepository.find({where: {book: parent}, skip: offset, take: limit})
+            return comments;
+        }
+
+    },
+
+    LibraryBook: {
+        book: async (parent: LibraryBook) => {
+            const book = await bookRepository.findOne({where: {bookId: parent.bookId}});
+            return book;
         }
     }
 }

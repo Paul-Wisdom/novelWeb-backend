@@ -12,9 +12,9 @@ export const typeDefs = `#graphql
         summary: String!
         tags: [Tag]!
         author: Author!
-        chapters: [Chapter!]!
-        reviews: [Review!]!
-        comments: [Comment!]!
+        chapters (offset: Int, limit: Int): [Chapter!]!
+        rating: Int!
+        comments (offset: Int, limit: Int): [Comment!]!
         authorNotes: [AuthorNote!]!
         createdAt: String!
         status: String!
@@ -123,9 +123,6 @@ export const typeDefs = `#graphql
         username: String!
         email: String!
     }
-    type StringOutput {
-        value: String!
-    }
 
     type Redirect {
         url: String!
@@ -136,7 +133,7 @@ export const typeDefs = `#graphql
         me: CombinedUser!
         authors: [Author!]!
         author (username: String!): Author
-        books (name: String, sortBy: String): [Book!]!
+        books (name: String, sortBy: String, offset: Int, limit: Int): [Book!]!
         tags: [Tag!]!
         findBooksByTags (tagIds: [String!]!, sortBy: String): [Book!]!
         book (bookId: ID, name: String, authorName: String): Book
@@ -153,17 +150,17 @@ export const typeDefs = `#graphql
     type Mutation {
         login (loginInput: LoginInput!): Token
         adminLogin (loginInput: LoginInput!): Token
-        forgetPasswordRequest(email: String!, newPassword: String!): StringOutput!
-        forgetPassword(code: String!, email: String!): StringOutput!
-        verifyMail (email: String!, verificationCode: String!): StringOutput!
-        resendVerificationCode(email: String!): StringOutput!
+        forgetPasswordRequest(email: String!, newPassword: String!): Boolean!
+        forgetPassword(code: String!, email: String!): Boolean!
+        verifyMail (email: String!, verificationCode: String!): Boolean!
+        resendVerificationCode(email: String!): Boolean!
         createAuthor (createUserInput: CreateUserInput!): Author
         createUser (createUserInput: CreateUserInput!): User
         createAdmin (email: String!, username: String!): Admin!
         createBook (createBookInput: CreateBookInput!): Book
         createTag (tagName: String!): Tag
-        addChapter (addChapterInput: AddChapterInput): Book
-        deleteChapter (chapterId: String!): StringOutput!
+        addChapter (addChapterInput: AddChapterInput): Chapter
+        deleteChapter (chapterId: String!): Boolean!
         addBookToLibrary (bookId: String!): LibraryBook
         changeBookStatus (bookId: String!, status: Int!): Book!
         deleteBookFromLibrary (libraryBookId: String): Library
@@ -173,11 +170,11 @@ export const typeDefs = `#graphql
         deleteReview (reviewId: String!): Review
         addComment (commentInput: CommentInput!): Comment
         editComment (commentId: String!, content: String! ): Comment
-        deleteComment (commentId: String!): String
+        deleteComment (commentId: String!): Boolean!
         addReply (commentId: String!, content: String!): Reply!
-        deleteReply (replyId: String!): StringOutput!
+        deleteReply (replyId: String!): Boolean!
         addAuthorNote(content: String!, bookId: String!): Book!
-        deleteAdmin (adminId: String!): StringOutput!
+        deleteAdmin (adminId: String!): Boolean!
         changeAdminPassword(adminId: String!, oldPassword: String!, newPassword: String!): Admin!
         uploadUserProfileImage(file: Upload!): File!
         uploadBookImage(file: Upload!, bookId: String!): File!
@@ -205,7 +202,7 @@ export const typeDefs = `#graphql
         title: String!
         content: String!
         bookId: String!
-        paywall: Boolean!
+        paywall: Boolean
     }
     input CommentInput {
         content: String!

@@ -3,6 +3,8 @@ dotenv.configDotenv()
 
 export const env = process.env.NODE_ENV
 
+export const SERVER_PORT = process.env.SERVER_PORT as unknown as number
+
 export const DB = process.env.DB
 export const DB_USERNAME = process.env.DB_USERNAME
 export const DB_PASSWORD = process.env.DB_PASSWORD

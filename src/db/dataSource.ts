@@ -5,7 +5,7 @@ import { Admin, Author, AuthorNote, Book, Chapter, Comment, Library, LibraryBook
 import { AuthorNotification, UserNotification } from '../entities/notification.entity'
 import { Mail } from '../entities/mail.entity'
 
-console.log(DB_CONNECTION_URL)
+// console.log(DB_CONNECTION_URL)
 const syncValue : boolean  = env === 'dev' ? true : false
 export const AppDataSource = new DataSource({
     type: 'postgres',

@@ -1,5 +1,5 @@
 import { expressMiddleware } from '@as-integrations/express4';
-import { env, JWT_SECRET } from "./config";
+import { env, JWT_SECRET, SERVER_PORT } from "./config";
 import { AppDataSource } from "./db/dataSource";
 import { ApolloServer } from "@apollo/server";
 import { typeDefs } from "./graphQL/typedefs";
@@ -70,8 +70,8 @@ AppDataSource.initialize().then((res) => {
         }
     }))
 
-    app.listen(3003, () => {
-        console.log(`Server ready at port 3003`)
+    app.listen(SERVER_PORT, () => {
+        console.log(`Server ready at port ${SERVER_PORT}`)
     })
 }).catch((e) => {
     console.log(e)
